@@ -1,0 +1,69 @@
+.context-menu {
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-elevated);
+  padding: var(--space-xs) 0;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  animation: menu-fade-in 100ms ease;
+}
+
+@keyframes menu-fade-in {
+  from { opacity: 0; transform: scale(0.98); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.context-menu-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px var(--space-lg);
+  background: transparent;
+  border: none;
+  color: var(--color-text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.context-menu-item:hover {
+  background: var(--color-accent);
+  color: white;
+}
+
+.context-menu-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  opacity: 0.8;
+}
+
+.context-menu-item:hover .context-menu-icon {
+  opacity: 1;
+}
+
+.context-menu-label {
+  flex: 1;
+}
+
+.context-menu-shortcut {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.context-menu-item:hover .context-menu-shortcut {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.context-menu-divider {
+  height: 1px;
+  background: var(--color-border-subtle);
+  margin: var(--space-xs) 0;
+}

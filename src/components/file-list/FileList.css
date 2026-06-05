@@ -1,0 +1,207 @@
+.file-list {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-border-subtle);
+  overflow: hidden;
+  user-select: none;
+}
+
+/* ── Header ─────────────────────────────────────── */
+
+.file-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-lg);
+  height: var(--toolbar-height);
+  border-bottom: 1px solid var(--color-border-subtle);
+  flex-shrink: 0;
+}
+
+.file-list-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+}
+
+.file-list-title {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-semibold);
+  color: var(--color-text-primary);
+}
+
+.file-list-count {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  background: var(--color-surface-elevated);
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+}
+
+.file-list-sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  background: none;
+  border: none;
+  font-family: var(--font-ui);
+}
+
+.file-list-sort:hover {
+  background: var(--color-hover);
+  color: var(--color-text-secondary);
+}
+
+/* ── Scrollable List ────────────────────────────── */
+
+.file-list-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-xs) 0;
+}
+
+/* ── File Item ──────────────────────────────────── */
+
+.file-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-lg);
+  min-height: 56px;
+  cursor: pointer;
+  border-left: 2px solid transparent;
+  transition: all var(--transition-fast);
+  position: relative;
+  -webkit-user-drag: element;
+}
+
+.file-list-item:hover {
+  background: var(--color-hover);
+}
+
+.file-list-item.active {
+  background: var(--color-accent-soft);
+  border-left-color: var(--color-accent);
+}
+
+.file-list-item-icon {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+}
+
+.file-list-item.active .file-list-item-icon {
+  color: var(--color-accent);
+}
+
+.file-list-item-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.file-list-item-name {
+  font-size: var(--font-size-md);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-list-item-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.file-list-item-workspace {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+.file-list-item-ext {
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+  font-size: 10px;
+  font-weight: var(--font-weight-medium);
+  flex-shrink: 0;
+}
+
+/* ── Right Side ─────────────────────────────────── */
+
+.file-list-item-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.file-list-item-date {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.file-list-item-favorite {
+  opacity: 0;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  background: none;
+  border: none;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+}
+
+.file-list-item-favorite.is-favorite {
+  opacity: 1;
+  color: var(--color-warning);
+}
+
+.file-list-item:hover .file-list-item-favorite {
+  opacity: 1;
+}
+
+.file-list-item-favorite:hover {
+  color: var(--color-warning);
+  transform: scale(1.15);
+}
+
+/* ── Empty State ────────────────────────────────── */
+
+.file-list-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  gap: var(--space-sm);
+  padding: var(--space-xl);
+  text-align: center;
+}
+
+.file-list-empty-icon {
+  opacity: 0.3;
+}

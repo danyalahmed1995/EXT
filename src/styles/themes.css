@@ -1,0 +1,66 @@
+/* ============================================================
+   EXT Design System — Theme Overrides
+   
+   The default theme (Material Dark Purple) is defined in tokens.css
+   on :root. Each theme class below overrides only the tokens that
+   differ from the default.
+   
+   Usage:  <html class="theme-material-dark-blue">
+           <html class="theme-material-light">
+   ============================================================ */
+
+
+/* ----------------------------------------------------------
+   Material Dark Blue
+   
+   Same dark chrome, swapped to a calm blue accent.
+   ---------------------------------------------------------- */
+.theme-material-dark-blue {
+  --color-accent: #5b8af5;
+  --color-accent-hover: #6e9af7;
+  --color-accent-soft: rgba(91, 138, 245, 0.12);
+  --color-active: rgba(91, 138, 245, 0.15);
+  --color-selection: rgba(91, 138, 245, 0.25);
+}
+
+
+/* ----------------------------------------------------------
+   Material Light
+   
+   Full light-mode surface & text palette with a deeper
+   purple accent for contrast on white backgrounds.
+   ---------------------------------------------------------- */
+.theme-material-light {
+  /* Surfaces */
+  --color-bg: #f5f5f8;
+  --color-surface: #ffffff;
+  --color-surface-elevated: #ffffff;
+  --color-surface-hover: #f0f0f4;
+  --color-sidebar: #f0f0f5;
+  --color-editor: #ffffff;
+  --color-preview: #fafafa;
+
+  /* Text */
+  --color-text-primary: #1a1a2e;
+  --color-text-secondary: #4a4a5e;
+  --color-text-muted: #8a8a9e;
+
+  /* Accent */
+  --color-accent: #6b4fcf;
+  --color-accent-hover: #7a5ee0;
+  --color-accent-soft: rgba(107, 79, 207, 0.08);
+
+  /* Borders */
+  --color-border: #e0e0e8;
+  --color-border-subtle: #eaeaf0;
+
+  /* Interactive States */
+  --color-hover: rgba(0, 0, 0, 0.03);
+  --color-active: rgba(107, 79, 207, 0.1);
+  --color-selection: rgba(107, 79, 207, 0.15);
+
+  /* Shadows — much softer for light mode */
+  --shadow-soft: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --shadow-panel: 0 4px 16px rgba(0, 0, 0, 0.08);
+  --shadow-elevated: 0 8px 32px rgba(0, 0, 0, 0.1);
+}

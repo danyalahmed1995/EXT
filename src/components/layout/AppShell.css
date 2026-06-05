@@ -1,0 +1,56 @@
+.app-shell {
+  display: flex;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  background: var(--color-bg);
+}
+
+/* ── Resize Handle ──────────────────────────────── */
+
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: background var(--transition-fast);
+}
+
+.resize-handle::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 100%;
+  background: var(--color-border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.resize-handle:hover::after,
+.resize-handle.dragging::after {
+  width: 3px;
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+
+/* ── Pane wrappers ──────────────────────────────── */
+
+.pane-sidebar {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pane-filelist {
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.pane-editor {
+  flex: 1;
+  min-width: 300px;
+  overflow: hidden;
+}
