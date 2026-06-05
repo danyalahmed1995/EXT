@@ -24,7 +24,6 @@ export const extEditorTheme: Extension = EditorView.theme(
       borderLeftColor: 'var(--color-accent)',
       borderLeftWidth: '2px',
       boxShadow: '0 0 10px var(--color-accent)',
-      transition: 'all 0.1s ease',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'var(--color-selection)',

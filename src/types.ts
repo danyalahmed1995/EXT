@@ -11,10 +11,13 @@ export interface FileItem {
   name: string;
   extension: string;
   workspace: string;
+  absolutePath: string;
   relativePath: string;
   modifiedAt: string;
   size: number;
   isFavorite: boolean;
   isPinned: boolean;
-  content: string;
+  content: string; // the actual raw content
 }
+
+export type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'custom';

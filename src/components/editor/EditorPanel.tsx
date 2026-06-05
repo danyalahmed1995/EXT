@@ -257,6 +257,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               key={activeTab.id}
               content={activeTab.content}
               onChange={(newContent) => onContentChange(activeTab.id, newContent)}
+              onSave={() => onSaveFile(activeTab.id)}
             />
           </div>
         )}
@@ -273,6 +274,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               key={activeTab.id}
               content={activeTab.content}
               onChange={(newContent) => onContentChange(activeTab.id, newContent)}
+              onSave={() => onSaveFile(activeTab.id)}
             />
           </div>
         )}

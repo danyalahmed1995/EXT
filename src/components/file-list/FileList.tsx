@@ -1,5 +1,5 @@
-import React from 'react';
-import { useDraggable } from '@dnd-kit/core';
+import React, { useState } from 'react';
+import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
   FileMarkdownIcon,
@@ -19,6 +19,7 @@ interface FileListFile {
   name: string;
   extension: string;
   workspace: string;
+  absolutePath: string;
   modifiedAt: string;
   isFavorite: boolean;
   size: number;
@@ -28,9 +29,12 @@ interface FileListProps {
   title: string;
   files: FileListFile[];
   activeFileId: string | null;
+  sortMode: import('../../types').SortMode;
+  onSortChange: (mode: import('../../types').SortMode) => void;
   onFileSelect: (fileId: string) => void;
   onToggleFavorite: (fileId: string) => void;
   onDeleteFile: (fileId: string) => void;
+  onCopyFile: (fileId: string) => void;
   onContextMenu?: (e: React.MouseEvent, fileId?: string) => void;
 }
 
@@ -69,6 +73,7 @@ interface FileListItemProps {
   name: string;
   extension: string;
   workspace: string;
+  absolutePath: string;
   modifiedAt: string;
   isFavorite: boolean;
   isActive: boolean;
@@ -89,13 +94,14 @@ const FileListItem: React.FC<FileListItemProps> = ({
   onToggleFavorite,
   onDelete,
 }) => {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `file-${id}`,
     data: { type: 'file', fileId: id },
   });
 
   const style = {
-    transform: CSS.Translate.toString(transform),
+    transform: CSS.Transform.toString(transform),
+    transition,
     opacity: isDragging ? 0.5 : 1,
     zIndex: isDragging ? 100 : 1,
   };
@@ -104,12 +110,14 @@ const FileListItem: React.FC<FileListItemProps> = ({
     <div
       ref={setNodeRef}
       style={style}
-      {...listeners}
       {...attributes}
+      {...listeners}
       className={`file-list-item ${isActive ? 'active' : ''}`}
       onClick={onSelect}
     >
-      <span className="file-list-item-icon">
+      <span 
+        className="file-list-item-icon"
+      >
         {getFileIcon(extension)}
       </span>
 
@@ -157,43 +165,75 @@ export const FileList: React.FC<FileListProps> = ({
   title,
   files,
   activeFileId,
+  sortMode,
+  onSortChange,
   onFileSelect,
   onToggleFavorite,
   onDeleteFile,
+  onCopyFile,
   onContextMenu,
 }) => {
+  const [showSortMenu, setShowSortMenu] = useState(false);
+
+  const sortLabel = {
+    'date-desc': 'Date (Newest)',
+    'date-asc': 'Date (Oldest)',
+    'name-asc': 'Name (A-Z)',
+    'name-desc': 'Name (Z-A)',
+    'custom': 'Custom',
+  }[sortMode];
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'c' && activeFileId) {
+      onCopyFile(activeFileId);
+    }
+  };
+
   return (
-    <div className="file-list" onContextMenu={onContextMenu}>
+    <div className="file-list" onContextMenu={onContextMenu} tabIndex={0} onKeyDown={handleKeyDown}>
       {/* Header */}
       <div className="file-list-header">
         <div className="file-list-header-left">
           <span className="file-list-title">{title}</span>
           <span className="file-list-count">{files.length}</span>
         </div>
-        <button className="file-list-sort">
-          Modified
-          <ChevronDownIcon size={12} />
-        </button>
+        <div className="file-list-sort-container">
+          <button className="file-list-sort" onClick={() => setShowSortMenu(!showSortMenu)}>
+            {sortLabel}
+            <ChevronDownIcon size={12} />
+          </button>
+          {showSortMenu && (
+            <div className="file-list-sort-menu">
+              <div className="file-list-sort-item" onClick={() => { onSortChange('date-desc'); setShowSortMenu(false); }}>Date (Newest)</div>
+              <div className="file-list-sort-item" onClick={() => { onSortChange('date-asc'); setShowSortMenu(false); }}>Date (Oldest)</div>
+              <div className="file-list-sort-item" onClick={() => { onSortChange('name-asc'); setShowSortMenu(false); }}>Name (A-Z)</div>
+              <div className="file-list-sort-item" onClick={() => { onSortChange('name-desc'); setShowSortMenu(false); }}>Name (Z-A)</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* File Items */}
       {files.length > 0 ? (
         <div className="file-list-items">
-          {files.map((file) => (
-            <FileListItem
-              key={file.id}
-              id={file.id}
-              name={file.name}
-              extension={file.extension}
-              workspace={file.workspace}
-              modifiedAt={file.modifiedAt}
-              isFavorite={file.isFavorite}
-              isActive={file.id === activeFileId}
-              onSelect={() => onFileSelect(file.id)}
-              onToggleFavorite={() => onToggleFavorite(file.id)}
-              onDelete={() => onDeleteFile(file.id)}
-            />
-          ))}
+          <SortableContext items={files.map(f => `file-${f.id}`)} strategy={verticalListSortingStrategy}>
+            {files.map((file) => (
+              <FileListItem
+                key={file.id}
+                id={file.id}
+                name={file.name}
+                extension={file.extension}
+                workspace={file.workspace}
+                absolutePath={file.absolutePath}
+                modifiedAt={file.modifiedAt}
+                isFavorite={file.isFavorite}
+                isActive={file.id === activeFileId}
+                onSelect={() => onFileSelect(file.id)}
+                onToggleFavorite={() => onToggleFavorite(file.id)}
+                onDelete={() => onDeleteFile(file.id)}
+              />
+            ))}
+          </SortableContext>
         </div>
       ) : (
         <div className="file-list-empty">

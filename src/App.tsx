@@ -6,9 +6,10 @@ import { EditorPanel, EditorTab, ViewMode } from './components/editor/EditorPane
 import { NewFileModal } from './components/modals/NewFileModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu, ContextMenuItem } from './components/context-menu/ContextMenu';
-import { Workspace, FileItem } from './types';
+import { Workspace, FileItem, SortMode } from './types';
 import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
+import { listen } from '@tauri-apps/api/event';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, pointerWithin } from '@dnd-kit/core';
 
 function App() {
@@ -21,6 +22,8 @@ function App() {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [isScanning, setIsScanning] = useState(true);
+  const [sortMode, setSortMode] = useState<SortMode>('date-desc');
+  const [customFileOrder, setCustomFileOrder] = useState<Record<string, string[]>>({});
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('');
@@ -28,6 +31,12 @@ function App() {
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 3000);
+  };
 
   // ── Initialization (Load Persistence) ───────────────
 
@@ -37,8 +46,12 @@ function App() {
       try {
         const storedWorkspaces: Workspace[] = JSON.parse(localStorage.getItem('ext_workspaces') || '[]');
         const storedFavorites: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
+        const storedSortMode: SortMode = (localStorage.getItem('ext_sortMode') as SortMode) || 'date-desc';
+        const storedCustomOrder: Record<string, string[]> = JSON.parse(localStorage.getItem('ext_customOrder') || '{}');
         
         setWorkspaces(storedWorkspaces);
+        setSortMode(storedSortMode);
+        setCustomFileOrder(storedCustomOrder);
         
         let allFiles: FileItem[] = [];
         
@@ -108,6 +121,14 @@ function App() {
     }
   }, [files, isScanning]);
 
+  // Sync sort state
+  useEffect(() => {
+    if (!isScanning) {
+      localStorage.setItem('ext_sortMode', sortMode);
+      localStorage.setItem('ext_customOrder', JSON.stringify(customFileOrder));
+    }
+  }, [sortMode, customFileOrder, isScanning]);
+
   // ── Smart view counts (dynamic) ───────────────────
 
   const getSmartViewCounts = useCallback(() => {
@@ -172,11 +193,31 @@ function App() {
       default:
         if (activeView.startsWith('ws-')) {
           const wsId = activeView.replace('ws-', '');
-          return result.filter((f) => f.workspaceId === wsId);
+          result = result.filter((f) => f.workspaceId === wsId);
         }
-        return result;
+        break;
     }
-  }, [activeView, files, searchQuery, searchGlobal]);
+
+    // Apply Sorting
+    if (sortMode === 'custom' && customFileOrder[activeView]) {
+      const orderMap = new Map(customFileOrder[activeView].map((id, index) => [id, index]));
+      result.sort((a, b) => {
+        const indexA = orderMap.has(a.id) ? orderMap.get(a.id)! : Infinity;
+        const indexB = orderMap.has(b.id) ? orderMap.get(b.id)! : Infinity;
+        return indexA - indexB;
+      });
+    } else if (sortMode === 'date-desc') {
+      result.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+    } else if (sortMode === 'date-asc') {
+      result.sort((a, b) => new Date(a.modifiedAt).getTime() - new Date(b.modifiedAt).getTime());
+    } else if (sortMode === 'name-asc') {
+      result.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortMode === 'name-desc') {
+      result.sort((a, b) => b.name.localeCompare(a.name));
+    }
+
+    return result;
+  }, [activeView, files, searchQuery, searchGlobal, sortMode, customFileOrder]);
 
   const getViewTitle = useCallback(() => {
     switch (activeView) {
@@ -316,6 +357,61 @@ function App() {
       alert(`Failed to pick or scan directory: ${err}`);
     }
   }, []);
+
+  const handleAddFolderByPath = useCallback(async (selectedPath: string) => {
+    try {
+      const name = selectedPath.split(/[/\\]/).pop() || 'Unknown Workspace';
+      const newId = `ws-${Date.now()}`;
+      
+      const result: { files: FileItem[], detectedIcon: string } = await invoke('scan_directory', {
+        path: selectedPath,
+        workspaceId: newId,
+        workspaceName: name,
+      });
+
+      const newWorkspace: Workspace = {
+        id: newId,
+        name,
+        path: selectedPath,
+        detectedIcon: result.detectedIcon,
+      };
+
+      setWorkspaces((prev) => {
+        if (prev.find(w => w.path === selectedPath)) return prev;
+        return [...prev, newWorkspace];
+      });
+      setFiles((prev) => {
+        const filtered = prev.filter(f => f.workspaceId !== newId);
+        return [...filtered, ...result.files];
+      });
+      setActiveView(`ws-${newId}`);
+    } catch (err) {
+      console.error('Failed to scan dropped directory:', err);
+      // Fails silently if a file is dropped instead of a folder
+    }
+  }, []);
+
+  useEffect(() => {
+    const unlistens: (() => void)[] = [];
+    
+    listen('tauri://drag-drop', (event: any) => {
+      const paths = event.payload?.paths;
+      if (Array.isArray(paths)) {
+        paths.forEach(p => handleAddFolderByPath(p));
+      }
+    }).then(u => unlistens.push(u));
+    
+    listen('tauri://file-drop', (event: any) => {
+      const paths = event.payload;
+      if (Array.isArray(paths)) {
+        paths.forEach(p => handleAddFolderByPath(p));
+      }
+    }).then(u => unlistens.push(u));
+
+    return () => {
+      unlistens.forEach(u => u());
+    };
+  }, [handleAddFolderByPath]);
 
   const handleRemoveWorkspace = useCallback((workspaceId: string) => {
     // Remove workspace
@@ -491,6 +587,23 @@ function App() {
     }
   }, [files, workspaces, activeFileId]);
 
+  // ── Copy File Handler ───────────────────────────────
+
+  const handleCopyFile = useCallback(async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file) return;
+
+    try {
+      await invoke('copy_file_to_clipboard', {
+        absolutePath: file.absolutePath
+      });
+      showToast('File copied to clipboard!');
+    } catch (err) {
+      console.error('Failed to copy file:', err);
+      alert(`Failed to copy file: ${err}`);
+    }
+  }, [files]);
+
   // ── Context Menus ───────────────────────────────────
 
   useEffect(() => {
@@ -547,6 +660,11 @@ function App() {
             }
           }
         },
+        {
+          label: 'Copy',
+          shortcut: 'Ctrl+C',
+          onClick: () => handleCopyFile(fileId)
+        },
         { divider: true, onClick: () => {} },
         {
           label: 'Delete',
@@ -555,6 +673,25 @@ function App() {
       ],
     });
   }, [files, workspaces, handleDeleteFile]);
+
+  const handleFileListDrop = useCallback((draggedId: string, targetId: string) => {
+    // Reorder the current filtered view
+    const currentFiles = getFilteredFiles();
+    const draggedIndex = currentFiles.findIndex(f => f.id === draggedId);
+    const targetIndex = currentFiles.findIndex(f => f.id === targetId);
+
+    if (draggedIndex === -1 || targetIndex === -1) return;
+
+    const newOrder = [...currentFiles.map(f => f.id)];
+    const [draggedItem] = newOrder.splice(draggedIndex, 1);
+    newOrder.splice(targetIndex, 0, draggedItem);
+
+    setCustomFileOrder(prev => ({
+      ...prev,
+      [activeView]: newOrder
+    }));
+    setSortMode('custom');
+  }, [getFilteredFiles, activeView]);
 
   // ── Drag & Drop Handlers ──────────────────────────
 
@@ -584,6 +721,14 @@ function App() {
       const workspaceId = over.data.current?.workspaceId;
       if (fileId && workspaceId) {
         handleMoveFile(fileId, workspaceId);
+      }
+    } else if (activeType === 'file' && overType === 'file') {
+      if (active.id !== over.id) {
+        const draggedFileId = active.data.current?.fileId;
+        const targetFileId = over.data.current?.fileId;
+        if (draggedFileId && targetFileId) {
+          handleFileListDrop(draggedFileId, targetFileId);
+        }
       }
     }
   };
@@ -641,14 +786,18 @@ function App() {
               name: f.name,
               extension: f.extension,
               workspace: f.workspace,
+              absolutePath: f.absolutePath,
               modifiedAt: f.modifiedAt,
               isFavorite: f.isFavorite,
               size: f.size,
             }))}
+            sortMode={sortMode}
             activeFileId={activeFileId}
+            onSortChange={setSortMode}
             onFileSelect={handleFileSelect}
             onToggleFavorite={handleToggleFavorite}
             onDeleteFile={handleDeleteFile}
+            onCopyFile={handleCopyFile}
             onContextMenu={(e, fileId) => handleFileListContextMenu(e, fileId)}
           />
         }
@@ -690,6 +839,11 @@ function App() {
           items={contextMenu.items}
           onClose={() => setContextMenu(null)}
         />
+      )}
+      {toastMessage && (
+        <div className="app-toast">
+          {toastMessage}
+        </div>
       )}
     </DndContext>
   );

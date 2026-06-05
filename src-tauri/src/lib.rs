@@ -19,6 +19,7 @@ pub struct ScannedFile {
     pub name: String,
     pub extension: String,
     pub workspace: String,
+    pub absolute_path: String,
     pub relative_path: String,
     pub modified_at: String,
     pub size: u64,
@@ -97,6 +98,7 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                         name,
                         extension: format!(".{}", ext_lower),
                         workspace: workspace_name.clone(),
+                        absolute_path: entry_path.to_string_lossy().to_string(),
                         relative_path: relative_path.replace("\\", "/"),
                         modified_at,
                         size,
@@ -161,6 +163,7 @@ fn create_file(workspace_path: String, workspace_id: String, workspace_name: Str
         name: file_name.clone(),
         extension: format!(".{}", ext_lower),
         workspace: workspace_name,
+        absolute_path: file_path.to_string_lossy().to_string(),
         relative_path: file_name,
         modified_at,
         size,
@@ -203,6 +206,7 @@ fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, Stri
         name: "README.md".to_string(),
         extension: ".md".to_string(),
         workspace: name.clone(),
+        absolute_path: readme_path.to_string_lossy().to_string(),
         relative_path: "README.md".to_string(),
         modified_at,
         size,
@@ -279,6 +283,7 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         name: file_name.to_string_lossy().to_string(),
         extension: format!(".{}", ext.to_lowercase()),
         workspace: String::new(), // Will be updated on frontend
+        absolute_path: target_path.to_string_lossy().to_string(),
         relative_path: file_name.to_string_lossy().to_string(),
         modified_at,
         size,
@@ -357,12 +362,34 @@ fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> 
 
     Ok(())
 }
+
+#[tauri::command]
+fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("powershell")
+            .args(["-NoProfile", "-Command", &format!("Set-Clipboard -Path '{}'", absolute_path.replace("'", "''"))])
+            .spawn()
+            .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("osascript")
+            .args(["-e", &format!("set the clipboard to POSIX file \"{}\"", absolute_path.replace("\"", "\\\""))])
+            .spawn()
+            .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
+    }
+
+    Ok(())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file, reveal_in_explorer, read_file])
+        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file, reveal_in_explorer, read_file, copy_file_to_clipboard])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

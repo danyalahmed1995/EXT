@@ -11,14 +11,26 @@ import { extEditorTheme, extHighlightStyle } from '../../styles/editor-theme';
 interface CodeMirrorEditorProps {
   content: string;
   onChange?: (content: string) => void;
+  onSave?: () => void;
 }
 
 export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   content,
   onChange,
+  onSave,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  
+  // Use refs for callbacks to avoid stale closures inside CodeMirror setup
+  const onChangeRef = useRef(onChange);
+  const onSaveRef = useRef(onSave);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    onChangeRef.current = onChange;
+    onSaveRef.current = onSave;
+  }, [onChange, onSave]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -36,14 +48,35 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         highlightSelectionMatches(),
         search({ top: true }),
         history(),
-        keymap.of([...defaultKeymap, ...historyKeymap, ...searchKeymap]),
+        keymap.of([
+          ...defaultKeymap, 
+          ...historyKeymap, 
+          ...searchKeymap,
+          {
+            key: 'Mod-s',
+            preventDefault: true,
+            run: (view) => {
+              // Force immediate sync before saving
+              if (timeoutRef.current) clearTimeout(timeoutRef.current);
+              if (onChangeRef.current) onChangeRef.current(view.state.doc.toString());
+              if (onSaveRef.current) onSaveRef.current();
+              return true;
+            }
+          }
+        ]),
         markdown({ codeLanguages: languages }),
         extEditorTheme,
         extHighlightStyle,
         EditorView.lineWrapping,
         EditorView.updateListener.of((update) => {
-          if (update.docChanged && onChange) {
-            onChange(update.state.doc.toString());
+          if (update.docChanged && onChangeRef.current) {
+            const newContent = update.state.doc.toString();
+            
+            // Debounce to prevent React re-renders from lagging the editor
+            if (timeoutRef.current) clearTimeout(timeoutRef.current);
+            timeoutRef.current = setTimeout(() => {
+              if (onChangeRef.current) onChangeRef.current(newContent);
+            }, 300);
           }
         }),
       ],
@@ -57,28 +90,17 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     viewRef.current = view;
 
     return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       view.destroy();
     };
-    // Only re-create on mount/unmount — content changes go through EditorView
+    // Only re-create on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Update content when the file changes (e.g., switching tabs)
-  useEffect(() => {
-    const view = viewRef.current;
-    if (view) {
-      const currentContent = view.state.doc.toString();
-      if (currentContent !== content) {
-        view.dispatch({
-          changes: {
-            from: 0,
-            to: currentContent.length,
-            insert: content,
-          },
-        });
-      }
-    }
-  }, [content]);
+  // The CodeMirrorEditor is completely unmounted/remounted when switching tabs
+  // due to the `key={activeTab.id}` prop in EditorPanel.tsx.
+  // We do not need to sync `content` back into the view on every change,
+  // which causes cursor jumping and lag during fast typing.
 
   return (
     <div className="codemirror-wrapper" ref={containerRef} />
