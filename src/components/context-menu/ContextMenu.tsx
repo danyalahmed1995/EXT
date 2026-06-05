@@ -19,9 +19,14 @@ interface ContextMenuProps {
 export const ContextMenu: React.FC<ContextMenuProps> = ({ x, y, items, onClose }) => {
   useEffect(() => {
     const handleClickOutside = () => onClose();
-    document.addEventListener('click', handleClickOutside);
-    document.addEventListener('contextmenu', handleClickOutside);
+    // Use a tiny timeout so the event that opened the context menu doesn't immediately close it
+    const timeoutId = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+      document.addEventListener('contextmenu', handleClickOutside);
+    }, 0);
+    
     return () => {
+      clearTimeout(timeoutId);
       document.removeEventListener('click', handleClickOutside);
       document.removeEventListener('contextmenu', handleClickOutside);
     };

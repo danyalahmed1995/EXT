@@ -26,12 +26,14 @@
 /* ----------------------------------------------------------
    Base — html, body, #root
    ---------------------------------------------------------- */
+/* ----------------------------------------------------------
+   Base — html, body, #root
+   ---------------------------------------------------------- */
 html,
-body,
-#root {
+body {
   height: 100%;
   overflow: hidden;
-  background-color: var(--color-bg);
+  background-color: #000;
   color: var(--color-text-primary);
   font-family: var(--font-ui);
   font-size: var(--font-size-md);
@@ -39,6 +41,26 @@ body,
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* ── Animated Glass Background Mesh ── */
+#root {
+  height: 100%;
+  overflow: hidden;
+  position: relative;
+  background: 
+    radial-gradient(circle at 15% 50%, rgba(124, 92, 252, 0.15), transparent 45%),
+    radial-gradient(circle at 85% 30%, rgba(41, 196, 255, 0.1), transparent 45%),
+    radial-gradient(circle at 50% 80%, rgba(245, 84, 106, 0.08), transparent 50%);
+  background-color: #0f0f14;
+  background-size: 200% 200%;
+  animation: bgMeshAnim 20s ease-in-out infinite alternate;
+}
+
+@keyframes bgMeshAnim {
+  0% { background-position: 0% 0%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 100%; }
 }
 
 

@@ -8,6 +8,7 @@ import {
   StarFilledIcon,
   FolderIcon,
   ChevronDownIcon,
+  TrashIcon,
 } from '../../icons/icons';
 import './FileList.css';
 
@@ -29,6 +30,7 @@ interface FileListProps {
   activeFileId: string | null;
   onFileSelect: (fileId: string) => void;
   onToggleFavorite: (fileId: string) => void;
+  onDeleteFile: (fileId: string) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
@@ -72,6 +74,7 @@ interface FileListItemProps {
   isActive: boolean;
   onSelect: () => void;
   onToggleFavorite: () => void;
+  onDelete: () => void;
 }
 
 const FileListItem: React.FC<FileListItemProps> = ({
@@ -84,6 +87,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
   isActive,
   onSelect,
   onToggleFavorite,
+  onDelete,
 }) => {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
     id: `file-${id}`,
@@ -130,6 +134,18 @@ const FileListItem: React.FC<FileListItemProps> = ({
         >
           {isFavorite ? <StarFilledIcon size={14} /> : <StarIcon size={14} />}
         </button>
+        <button
+          className="file-list-item-delete"
+          style={{ color: '#f5546a', marginLeft: '4px' }}
+          onPointerDown={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete();
+          }}
+          title="Delete file"
+        >
+          <TrashIcon size={14} />
+        </button>
       </div>
     </div>
   );
@@ -143,6 +159,7 @@ export const FileList: React.FC<FileListProps> = ({
   activeFileId,
   onFileSelect,
   onToggleFavorite,
+  onDeleteFile,
   onContextMenu,
 }) => {
   return (
@@ -174,6 +191,7 @@ export const FileList: React.FC<FileListProps> = ({
               isActive={file.id === activeFileId}
               onSelect={() => onFileSelect(file.id)}
               onToggleFavorite={() => onToggleFavorite(file.id)}
+              onDelete={() => onDeleteFile(file.id)}
             />
           ))}
         </div>

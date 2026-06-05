@@ -268,13 +268,27 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         content,
     })
 }
-
+#[tauri::command]
+fn delete_file(workspace_path: String, relative_path: String) -> Result<(), String> {
+    let root = Path::new(&workspace_path);
+    let file_path = root.join(&relative_path);
+    
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+    
+    if let Err(e) = fs::remove_file(&file_path) {
+        return Err(format!("Failed to delete file: {}", e));
+    }
+    
+    Ok(())
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file])
+        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -45,6 +45,7 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onSearch: (query: string, global: boolean) => void;
   onMoveFile: (fileId: string, targetWorkspaceId: string) => void;
+  onWorkspaceContextMenu?: (e: React.MouseEvent, workspaceId: string) => void;
 }
 
 // ── Helper: Get workspace icon ──────────────────────
@@ -133,6 +134,7 @@ interface WorkspaceItemProps {
   isActive: boolean;
   onClick: () => void;
   onDropFile: (fileId: string) => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
@@ -142,6 +144,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   isActive,
   onClick,
   onDropFile, // Kept for interface compatibility, but we handle it in App.tsx now
+  onContextMenu,
 }) => {
   const { isOver, setNodeRef } = useDroppable({
     id: `workspace-${id}`,
@@ -153,6 +156,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       ref={setNodeRef}
       className={`workspace-item ${isActive ? 'active' : ''} ${isOver ? 'drag-over' : ''}`}
       onClick={onClick}
+      onContextMenu={onContextMenu}
     >
       <span className="workspace-item-icon">
         {getWorkspaceIcon(detectedIcon)}
@@ -176,6 +180,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onSearch,
   onMoveFile,
+  onWorkspaceContextMenu,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGlobal, setSearchGlobal] = useState(false);
@@ -287,6 +292,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               isActive={activeView === `ws-${ws.id}`}
               onClick={() => onViewChange(`ws-${ws.id}`)}
               onDropFile={(fileId) => onMoveFile(fileId, ws.id)}
+              onContextMenu={(e) => onWorkspaceContextMenu?.(e, ws.id)}
             />
           ))}
         </SidebarSection>

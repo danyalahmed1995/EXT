@@ -7,7 +7,7 @@ import { NewFileModal } from './components/modals/NewFileModal';
 import { ContextMenu, ContextMenuItem } from './components/context-menu/ContextMenu';
 import { mockWorkspaces, mockFiles, MockWorkspace, MockFile } from './data/mockData';
 import { invoke } from '@tauri-apps/api/core';
-import { open } from '@tauri-apps/plugin-dialog';
+import { open, ask } from '@tauri-apps/plugin-dialog';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, pointerWithin } from '@dnd-kit/core';
 import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 
@@ -229,6 +229,28 @@ function App() {
     }
   }, []);
 
+  const handleRemoveWorkspace = useCallback((workspaceId: string) => {
+    // Remove workspace
+    setWorkspaces((prev) => prev.filter((w) => w.id !== workspaceId));
+    
+    // Remove associated files
+    setFiles((prev) => prev.filter((f) => f.workspaceId !== workspaceId));
+    
+    // Close associated tabs
+    const tabsToClose = files.filter((f) => f.workspaceId === workspaceId).map(f => f.id);
+    if (tabsToClose.length > 0) {
+      setOpenTabs((prev) => prev.filter((t) => !tabsToClose.includes(t.id)));
+      if (activeFileId && tabsToClose.includes(activeFileId)) {
+        setActiveFileId(null);
+      }
+    }
+
+    // Update active view if it was pointing to this workspace
+    if (activeView === `ws-${workspaceId}`) {
+      setActiveView('allMarkdown');
+    }
+  }, [files, activeView, activeFileId]);
+
   // ── New File Handler ──────────────────────────────
 
   const handleCreateFile = useCallback(async (workspaceId: string, fileName: string) => {
@@ -338,6 +360,41 @@ function App() {
     }
   }, [openTabs, files, workspaces]);
 
+  // ── Delete File Handler ─────────────────────────────
+
+  const handleDeleteFile = useCallback(async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    const workspace = workspaces.find(w => w.id === file?.workspaceId);
+    
+    if (!file || !workspace) return;
+
+    const confirmed = await ask(`Are you sure you want to delete "${file.name}"? This action cannot be undone.`, {
+      title: 'Confirm Deletion',
+      kind: 'warning',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      await invoke('delete_file', {
+        workspacePath: workspace.path,
+        relativePath: file.relativePath,
+      });
+
+      // Remove from files state
+      setFiles((prev) => prev.filter((f) => f.id !== fileId));
+
+      // Close tab if open
+      setOpenTabs((prev) => prev.filter((t) => t.id !== fileId));
+      if (activeFileId === fileId) {
+        setActiveFileId(null);
+      }
+    } catch (err) {
+      console.error('Failed to delete file:', err);
+      alert(`Failed to delete file: ${err}`);
+    }
+  }, [files, workspaces, activeFileId]);
+
   // ── Context Menus ───────────────────────────────────
 
   useEffect(() => {
@@ -437,6 +494,19 @@ function App() {
               setSearchGlobal(global);
             }}
             onMoveFile={handleMoveFile}
+            onWorkspaceContextMenu={(e, workspaceId) => {
+              e.preventDefault();
+              setContextMenu({
+                x: e.clientX,
+                y: e.clientY,
+                items: [
+                  {
+                    label: 'Remove Workspace',
+                    onClick: () => handleRemoveWorkspace(workspaceId)
+                  }
+                ]
+              });
+            }}
           />
         }
         fileList={
@@ -454,6 +524,7 @@ function App() {
             activeFileId={activeFileId}
             onFileSelect={handleFileSelect}
             onToggleFavorite={handleToggleFavorite}
+            onDeleteFile={handleDeleteFile}
             onContextMenu={handleFileListContextMenu}
           />
         }

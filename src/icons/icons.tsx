@@ -276,3 +276,11 @@ export const UnsavedDot: React.FC<IconProps> = ({ size = 8, className, style }) 
     <circle cx="4" cy="4" r="3.5" fill="currentColor" />
   </svg>
 );
+
+export const TrashIcon: React.FC<IconProps> = ({ size = 16, className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} style={style}>
+    <path d="M3 4h10M5 4V3a1 1 0 011-1h4a1 1 0 011 1v1M4 4v9a2 2 0 002 2h4a2 2 0 002-2V4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <line x1="6.5" y1="7" x2="6.5" y2="12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    <line x1="9.5" y1="7" x2="9.5" y2="12" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+  </svg>
+);

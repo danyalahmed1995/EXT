@@ -3,6 +3,9 @@
   flex-direction: column;
   height: 100%;
   background: var(--color-editor);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border-top: var(--glass-border);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -14,7 +17,7 @@
   display: flex;
   align-items: center;
   height: var(--toolbar-height);
-  background: var(--color-surface);
+  background: transparent;
   border-bottom: 1px solid var(--color-border);
   flex-shrink: 0;
   user-select: none;
@@ -62,7 +65,7 @@
 
 .editor-tab.active {
   color: var(--color-text-primary);
-  background: var(--color-editor);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .editor-tab.active::after {
@@ -136,7 +139,7 @@
 .editor-view-switcher {
   display: flex;
   align-items: center;
-  background: var(--color-surface-elevated);
+  background: rgba(0, 0, 0, 0.2);
   border-radius: var(--radius-pill);
   padding: 2px;
   gap: 2px;
@@ -242,7 +245,7 @@
   align-items: center;
   height: var(--statusbar-height);
   padding: 0 var(--space-lg);
-  background: var(--color-surface);
+  background: transparent;
   border-top: 1px solid var(--color-border-subtle);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
