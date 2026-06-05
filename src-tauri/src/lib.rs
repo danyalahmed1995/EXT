@@ -45,9 +45,22 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
         detected_icon = "python".to_string();
     }
 
+    let ignored_dirs = vec![
+        ".git", "node_modules", "dist", "build", "target", ".next", "out", "coverage", "vendor",
+        "Library", "Temp", "tmp", ".cache", ".turbo", ".venv", "venv", "bin", "obj",
+    ];
+
     let mut counter = 0;
 
-    for entry in WalkDir::new(root).into_iter().filter_map(|e| e.ok()) {
+    let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
+        let is_hidden = e.file_name().to_str().map(|s| s.starts_with(".")).unwrap_or(false);
+        let is_ignored = e.file_name().to_str().map(|s| ignored_dirs.contains(&s)).unwrap_or(false);
+        // Exclude ignored dirs entirely, and normally we might exclude hidden dirs but .github etc might be useful.
+        // Let's just exclude our hardcoded ignored dirs.
+        !is_ignored && (!is_hidden || e.depth() == 0 || e.file_name() == ".github")
+    });
+
+    for entry in walker.filter_map(|e| e.ok()) {
         let entry_path = entry.path();
         if entry_path.is_file() {
             if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
@@ -68,7 +81,13 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                     };
                     
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    let content = fs::read_to_string(&entry_path).unwrap_or_default();
+                    
+                    // Only read content if file is < 2MB (2,097,152 bytes)
+                    let content = if size < 2 * 1024 * 1024 {
+                        fs::read_to_string(&entry_path).unwrap_or_default()
+                    } else {
+                        String::from("[File too large to preview full content inline]")
+                    };
                     
                     counter += 1;
                     
@@ -283,12 +302,67 @@ fn delete_file(workspace_path: String, relative_path: String) -> Result<(), Stri
     
     Ok(())
 }
+
+#[tauri::command]
+fn read_file(workspace_path: String, relative_path: String) -> Result<String, String> {
+    let root = Path::new(&workspace_path);
+    let file_path = root.join(&relative_path);
+    
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+    
+    fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))
+}
+
+#[tauri::command]
+fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> Result<(), String> {
+    let mut path = Path::new(&workspace_path).to_path_buf();
+    
+    if let Some(rel) = relative_path {
+        path = path.join(rel);
+    }
+    
+    if !path.exists() {
+        return Err("Path does not exist".to_string());
+    }
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg("/select,")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open explorer: {}", e))?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open")
+            .arg("-R")
+            .arg(path)
+            .spawn()
+            .map_err(|e| format!("Failed to open finder: {}", e))?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        // For linux, there's no standard way to select a file, so we open the parent dir
+        let dir = if path.is_file() { path.parent().unwrap() } else { &path };
+        std::process::Command::new("xdg-open")
+            .arg(dir)
+            .spawn()
+            .map_err(|e| format!("Failed to open file manager: {}", e))?;
+    }
+
+    Ok(())
+}
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file])
+        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file, reveal_in_explorer, read_file])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import './ContextMenu.css';
 
 export interface ContextMenuItem {
-  label: string;
+  label?: string;
   icon?: React.ReactNode;
   shortcut?: string;
   onClick: () => void;

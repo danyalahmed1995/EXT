@@ -31,7 +31,7 @@ interface FileListProps {
   onFileSelect: (fileId: string) => void;
   onToggleFavorite: (fileId: string) => void;
   onDeleteFile: (fileId: string) => void;
-  onContextMenu?: (e: React.MouseEvent) => void;
+  onContextMenu?: (e: React.MouseEvent, fileId?: string) => void;
 }
 
 // ── Date Formatting ─────────────────────────────────
@@ -198,7 +198,7 @@ export const FileList: React.FC<FileListProps> = ({
       ) : (
         <div className="file-list-empty">
           <FolderIcon size={32} className="file-list-empty-icon" />
-          <span>No files in this view</span>
+          <span>No Markdown or text files found in this view.</span>
         </div>
       )}
     </div>

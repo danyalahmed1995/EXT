@@ -44,7 +44,6 @@ interface SidebarProps {
   onAddFolder: () => void;
   onOpenSettings: () => void;
   onSearch: (query: string, global: boolean) => void;
-  onMoveFile: (fileId: string, targetWorkspaceId: string) => void;
   onWorkspaceContextMenu?: (e: React.MouseEvent, workspaceId: string) => void;
 }
 
@@ -133,7 +132,6 @@ interface WorkspaceItemProps {
   detectedIcon: string;
   isActive: boolean;
   onClick: () => void;
-  onDropFile: (fileId: string) => void;
   onContextMenu?: (e: React.MouseEvent) => void;
 }
 
@@ -143,7 +141,6 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   detectedIcon,
   isActive,
   onClick,
-  onDropFile, // Kept for interface compatibility, but we handle it in App.tsx now
   onContextMenu,
 }) => {
   const { isOver, setNodeRef } = useDroppable({
@@ -179,7 +176,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onAddFolder,
   onOpenSettings,
   onSearch,
-  onMoveFile,
   onWorkspaceContextMenu,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
@@ -291,7 +287,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
               detectedIcon={ws.detectedIcon}
               isActive={activeView === `ws-${ws.id}`}
               onClick={() => onViewChange(`ws-${ws.id}`)}
-              onDropFile={(fileId) => onMoveFile(fileId, ws.id)}
               onContextMenu={(e) => onWorkspaceContextMenu?.(e, ws.id)}
             />
           ))}

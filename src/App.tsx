@@ -4,12 +4,12 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { FileList } from './components/file-list/FileList';
 import { EditorPanel, EditorTab, ViewMode } from './components/editor/EditorPanel';
 import { NewFileModal } from './components/modals/NewFileModal';
+import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu, ContextMenuItem } from './components/context-menu/ContextMenu';
-import { mockWorkspaces, mockFiles, MockWorkspace, MockFile } from './data/mockData';
+import { Workspace, FileItem } from './types';
 import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { DndContext, DragEndEvent, PointerSensor, useSensor, useSensors, pointerWithin } from '@dnd-kit/core';
-import { SortableContext, horizontalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 
 function App() {
   // ── State ─────────────────────────────────────────
@@ -17,26 +17,96 @@ function App() {
   const [activeView, setActiveView] = useState('allMarkdown');
   const [viewMode, setViewMode] = useState<ViewMode>('split');
   const [activeFileId, setActiveFileId] = useState<string | null>('f-1');
-  const [openTabs, setOpenTabs] = useState<EditorTab[]>(() => {
-    const firstFile = mockFiles[0];
-    return firstFile
-      ? [{
-          id: firstFile.id,
-          name: firstFile.name,
-          extension: firstFile.extension,
-          content: firstFile.content,
-          isDirty: false,
-        }]
-      : [];
-  });
-  const [files, setFiles] = useState<MockFile[]>(mockFiles);
-  const [workspaces, setWorkspaces] = useState<MockWorkspace[]>(mockWorkspaces);
+  const [openTabs, setOpenTabs] = useState<EditorTab[]>([]);
+  const [files, setFiles] = useState<FileItem[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [isScanning, setIsScanning] = useState(true);
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGlobal, setSearchGlobal] = useState(false);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
+
+  // ── Initialization (Load Persistence) ───────────────
+
+  useEffect(() => {
+    async function loadData() {
+      setIsScanning(true);
+      try {
+        const storedWorkspaces: Workspace[] = JSON.parse(localStorage.getItem('ext_workspaces') || '[]');
+        const storedFavorites: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
+        
+        setWorkspaces(storedWorkspaces);
+        
+        let allFiles: FileItem[] = [];
+        
+        // Scan all stored workspaces concurrently
+        await Promise.all(
+          storedWorkspaces.map(async (ws) => {
+            try {
+              const result: { files: FileItem[], detectedIcon: string } = await invoke('scan_directory', {
+                path: ws.path,
+                workspaceId: ws.id,
+                workspaceName: ws.name,
+              });
+              
+              // Apply favorite status
+              const scannedWithFavs = result.files.map(f => ({
+                ...f,
+                isFavorite: storedFavorites.includes(f.id) || storedFavorites.includes(f.relativePath), // Fallback to path just in case
+              }));
+              
+              allFiles = allFiles.concat(scannedWithFavs);
+            } catch (err) {
+              console.error(`Failed to scan workspace ${ws.name}:`, err);
+            }
+          })
+        );
+        
+        setFiles(allFiles);
+        
+        // Auto-open recent file or first file if nothing active
+        if (allFiles.length > 0) {
+          // Sort by modified
+          allFiles.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
+          const first = allFiles[0];
+          setActiveFileId(first.id);
+          setOpenTabs([{
+            id: first.id,
+            name: first.name,
+            extension: first.extension,
+            content: first.content,
+            isDirty: false,
+          }]);
+        } else {
+          setActiveFileId(null);
+        }
+      } catch (e) {
+        console.error('Error loading initialization data:', e);
+      } finally {
+        setIsScanning(false);
+      }
+    }
+    
+    loadData();
+  }, []);
+
+  // Sync workspaces to localStorage when changed
+  useEffect(() => {
+    if (!isScanning) {
+      localStorage.setItem('ext_workspaces', JSON.stringify(workspaces));
+    }
+  }, [workspaces, isScanning]);
+
+  // Sync favorites to localStorage when changed
+  useEffect(() => {
+    if (!isScanning) {
+      const favorites = files.filter(f => f.isFavorite).map(f => f.id);
+      localStorage.setItem('ext_favorites', JSON.stringify(favorites));
+    }
+  }, [files, isScanning]);
 
   // ── Smart view counts (dynamic) ───────────────────
 
@@ -133,17 +203,35 @@ function App() {
       setActiveFileId(fileId);
       if (!openTabs.find((t) => t.id === fileId)) {
         const file = files.find((f) => f.id === fileId);
-        if (file) {
-          setOpenTabs((tabs) => [
-            ...tabs,
-            {
-              id: file.id,
-              name: file.name,
-              extension: file.extension,
-              content: file.content,
-              isDirty: false,
-            },
-          ]);
+        const workspace = workspaces.find((w) => w.id === file?.workspaceId);
+        if (file && workspace) {
+          // If the file is >2MB, the content might be a placeholder. We should really read it here via invoke('read_file')
+          // but for now we will just use the content we got, or maybe fetch it.
+          // Since the prompt requires MVP and 2MB limit was added, we can read the file live.
+          invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
+            setOpenTabs((tabs) => [
+              ...tabs,
+              {
+                id: file.id,
+                name: file.name,
+                extension: file.extension,
+                content: content || file.content,
+                isDirty: false,
+              },
+            ]);
+          }).catch(() => {
+             // Fallback
+             setOpenTabs((tabs) => [
+              ...tabs,
+              {
+                id: file.id,
+                name: file.name,
+                extension: file.extension,
+                content: file.content,
+                isDirty: false,
+              },
+            ]);
+          });
         }
       }
     },
@@ -207,13 +295,13 @@ function App() {
       const name = selectedPath.split(/[/\\]/).pop() || 'Unknown Workspace';
       const newId = `ws-${Date.now()}`;
       
-      const result: { files: MockFile[], detectedIcon: string } = await invoke('scan_directory', {
+      const result: { files: FileItem[], detectedIcon: string } = await invoke('scan_directory', {
         path: selectedPath,
         workspaceId: newId,
         workspaceName: name,
       });
 
-      const newWorkspace: MockWorkspace = {
+      const newWorkspace: Workspace = {
         id: newId,
         name,
         path: selectedPath,
@@ -251,6 +339,14 @@ function App() {
     }
   }, [files, activeView, activeFileId]);
 
+  const handleRemoveAllWorkspaces = useCallback(() => {
+    setWorkspaces([]);
+    setFiles([]);
+    setOpenTabs([]);
+    setActiveFileId(null);
+    setActiveView('allMarkdown');
+  }, []);
+
   // ── New File Handler ──────────────────────────────
 
   const handleCreateFile = useCallback(async (workspaceId: string, fileName: string) => {
@@ -258,7 +354,7 @@ function App() {
     if (!ws) return;
 
     try {
-      const newFile: MockFile = await invoke('create_file', {
+      const newFile: FileItem = await invoke('create_file', {
         workspacePath: ws.path,
         workspaceId: ws.id,
         workspaceName: ws.name,
@@ -294,7 +390,7 @@ function App() {
     if (!file || !sourceWs || !targetWs || sourceWs.id === targetWs.id) return;
 
     try {
-      const movedFile: MockFile = await invoke('move_file', {
+      const movedFile: FileItem = await invoke('move_file', {
         sourceWorkspacePath: sourceWs.path,
         targetWorkspacePath: targetWs.path,
         relativePath: file.relativePath,
@@ -420,8 +516,15 @@ function App() {
     return () => window.removeEventListener('editor-context-menu', handleEditorContextMenu);
   }, [handleSaveFile]);
 
-  const handleFileListContextMenu = useCallback((e: React.MouseEvent) => {
+  const handleFileListContextMenu = useCallback((e: React.MouseEvent, fileId?: string) => {
     e.preventDefault();
+    if (!fileId) return;
+    
+    const file = files.find(f => f.id === fileId);
+    const workspace = workspaces.find(w => w.id === file?.workspaceId);
+
+    if (!file || !workspace) return;
+
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -432,14 +535,26 @@ function App() {
           onClick: () => setShowNewFileModal(true)
         },
         {
-          label: 'Export / Copy to...',
-          onClick: () => {
-            alert('Export feature coming soon! (Tauri drag-out to OS is not natively supported on Windows)');
+          label: 'Reveal in File Explorer',
+          onClick: async () => {
+            try {
+              await invoke('reveal_in_explorer', {
+                workspacePath: workspace.path,
+                relativePath: file.relativePath
+              });
+            } catch (err) {
+              console.error('Failed to reveal in explorer', err);
+            }
           }
+        },
+        { divider: true, onClick: () => {} },
+        {
+          label: 'Delete',
+          onClick: () => handleDeleteFile(fileId)
         }
       ],
     });
-  }, []);
+  }, [files, workspaces, handleDeleteFile]);
 
   // ── Drag & Drop Handlers ──────────────────────────
 
@@ -488,18 +603,27 @@ function App() {
             activeView={activeView}
             onViewChange={setActiveView}
             onAddFolder={handleAddFolder}
-            onOpenSettings={() => {/* TODO: Phase 12 */}}
+            onOpenSettings={() => setShowSettingsModal(true)}
             onSearch={(query, global) => {
               setSearchQuery(query);
               setSearchGlobal(global);
             }}
-            onMoveFile={handleMoveFile}
             onWorkspaceContextMenu={(e, workspaceId) => {
               e.preventDefault();
               setContextMenu({
                 x: e.clientX,
                 y: e.clientY,
                 items: [
+                  {
+                    label: 'Reveal in File Explorer',
+                    onClick: async () => {
+                      const ws = workspaces.find(w => w.id === workspaceId);
+                      if (ws) {
+                        await invoke('reveal_in_explorer', { workspacePath: ws.path, relativePath: null });
+                      }
+                    }
+                  },
+                  { divider: true, onClick: () => {} },
                   {
                     label: 'Remove Workspace',
                     onClick: () => handleRemoveWorkspace(workspaceId)
@@ -525,7 +649,7 @@ function App() {
             onFileSelect={handleFileSelect}
             onToggleFavorite={handleToggleFavorite}
             onDeleteFile={handleDeleteFile}
-            onContextMenu={handleFileListContextMenu}
+            onContextMenu={(e, fileId) => handleFileListContextMenu(e, fileId)}
           />
         }
         editor={
@@ -538,9 +662,8 @@ function App() {
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
             onSaveFile={handleSaveFile}
-            onTabReorder={handleTabReorder}
             onNewFile={() => setShowNewFileModal(true)}
-            onOpenSettings={() => {/* TODO: Phase 12 */}}
+            onOpenSettings={() => setShowSettingsModal(true)}
           />
         }
       />
@@ -552,6 +675,12 @@ function App() {
           defaultWorkspaceId={activeView.startsWith('ws-') ? activeView.replace('ws-', '') : undefined}
           onClose={() => setShowNewFileModal(false)}
           onCreate={handleCreateFile}
+        />
+      )}
+      {showSettingsModal && (
+        <SettingsModal
+          onClose={() => setShowSettingsModal(false)}
+          onRemoveAllWorkspaces={handleRemoveAllWorkspaces}
         />
       )}
       {contextMenu && (

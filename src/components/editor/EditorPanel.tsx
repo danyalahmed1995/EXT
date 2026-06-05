@@ -38,7 +38,6 @@ interface EditorPanelProps {
   onTabClose: (tabId: string) => void;
   onContentChange: (tabId: string, content: string) => void;
   onSaveFile: (tabId: string) => void;
-  onTabReorder: (dragIndex: number, hoverIndex: number) => void;
   onNewFile: () => void;
   onOpenSettings: () => void;
 }
@@ -116,7 +115,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onTabClose,
   onContentChange,
   onSaveFile,
-  onTabReorder,
   onNewFile,
   onOpenSettings,
 }) => {

@@ -1,105 +1,51 @@
 # EXT
+A local-first workspace for Markdown and text files.
 
-A fast, local-first workspace for Markdown and text files scattered across your folders.
+## What is EXT?
+EXT is not a generic Markdown editor. It is a dedicated desktop application that helps you organize, search, open, edit, and preview Markdown and text files scattered across multiple local folders. Your files stay exactly where they are on your hard drive, keeping you fully in control of your data without requiring cloud syncing or a centralized proprietary database.
 
-> Add folders. See files. Search. Edit. Preview. Save.
-
-## Features
-
-### Working (v0.1 Prototype)
-
-- ✅ Three-pane layout (sidebar, file list, editor/preview)
-- ✅ Material Dark Purple theme with CSS variables
-- ✅ Sidebar with smart views and workspace list
-- ✅ Smart folder/project icons (TypeScript, Python, Rust, etc.)
-- ✅ File list with favorites, extension badges, and relative dates
-- ✅ CodeMirror 6 editor with Markdown syntax highlighting
-- ✅ Live Markdown preview with sanitized HTML
-- ✅ Editor / Split / Preview view modes
-- ✅ Resizable panes
-- ✅ Tab system with unsaved indicators
-
-### Planned
-
-- 📋 Add folders and scan real files
-- 📋 File watching for external changes
-- 📋 Global search across files
-- 📋 Real file read/write with conflict detection
-- 📋 Settings panel
-- 📋 Theme switcher
-- 📋 Quick open (Ctrl+P)
-- 📋 Keyboard shortcuts
+## Features (MVP)
+- **Local-First Filesystem:** Instantly read, write, and delete real files without importing them.
+- **Auto-Scanning:** Recursively scans added folders for `.md` and `.txt` files while automatically ignoring noisy build directories (like `node_modules` or `.git`).
+- **Dynamic Organization:** View your scattered files grouped by folder context, favorites, recent modifications, or file type.
+- **Global Search:** Find files instantly across all your connected workspaces.
+- **Polished Editor & Preview:** A premium split-view environment with syntax highlighting, GitHub-flavored markdown preview, and a beautiful frosted glass UI.
+- **Persistence:** Remembers your connected workspaces and favorites between sessions securely.
 
 ## Tech Stack
+- **Frontend:** React, TypeScript, Vite
+- **Editor:** CodeMirror 6, Markdown-it
+- **Backend:** Rust, Tauri
+- **Styling:** Vanilla CSS Custom Properties (Glassmorphism design system)
 
-| Layer | Technology |
-|-------|-----------|
-| Desktop shell | Tauri v2 |
-| Backend | Rust |
-| Frontend | React 19 + TypeScript |
-| Build tool | Vite |
-| Editor | CodeMirror 6 |
-| Markdown | markdown-it + DOMPurify |
-| Styling | CSS variables + Material tokens |
-
-## Development
+## Setup & Run Instructions
 
 ### Prerequisites
+1. [Node.js](https://nodejs.org) (v16+)
+2. [Rust](https://www.rust-lang.org/tools/install)
+3. Tauri CLI and OS specific prerequisites as defined in [Tauri Docs](https://tauri.app/v1/guides/getting-started/prerequisites)
 
-- [Node.js](https://nodejs.org/) 18+
-- [Rust](https://rustup.rs/) toolchain
-- Windows: Visual Studio C++ Build Tools
-
-### Install
-
-```bash
-npm install
-```
-
-### Run (frontend only)
-
-```bash
-npm run dev
-```
-
-### Run (full Tauri app)
-
-```bash
-npm run tauri dev
-```
+### Development
+1. Clone the repository and navigate to the root directory.
+2. Install frontend dependencies:
+   ```bash
+   npm install
+   ```
+3. Run the Tauri dev server:
+   ```bash
+   npm run tauri dev
+   ```
+This will automatically launch Vite and compile the Rust backend, opening the native desktop window.
 
 ### Build
-
+To build a production executable:
 ```bash
 npm run tauri build
 ```
-
-## Roadmap
-
-### v0.1 — UI Prototype ✅
-- App shell with three-pane layout
-- Material dark theme
-- Mock data for all views
-- CodeMirror editor + Markdown preview
-
-### v0.2 — Core Functionality
-- Add folders and scan `.md`, `.markdown`, `.txt`
-- SQLite file index
-- Open, edit, save files
-- File watching
-
-### v0.3 — Search & Smart Views
-- Global filename + content search
-- Smart views (Recent, Favorites, TODOs, etc.)
-- Favorites and pinning
-
-### v0.4 — Polish
-- Theme system (Dark Purple, Dark Blue, Light)
-- Settings panel
-- Keyboard shortcuts
-- Quick open
-- Packaging and installers
+The resulting executable will be available in `src-tauri/target/release`.
 
 ## License
+MIT License.
 
-[MIT](./LICENSE)
+## Contributing
+Themes are powered by CSS variables. Feel free to modify `src/index.css` to craft new looks!

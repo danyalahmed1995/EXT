@@ -1,0 +1,71 @@
+.settings-modal {
+  max-width: 500px;
+  width: 90%;
+}
+
+.settings-section {
+  margin-bottom: 24px;
+}
+
+.settings-section h3 {
+  margin: 0 0 8px 0;
+  font-size: var(--font-size-lg);
+  color: var(--color-text-primary);
+}
+
+.settings-desc {
+  margin: 0 0 12px 0;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  line-height: 1.5;
+}
+
+.ignored-dirs-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.ignored-dir-badge {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.danger-zone h3 {
+  color: var(--color-error);
+}
+
+.danger-action {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(245, 84, 106, 0.05);
+  border: 1px solid rgba(245, 84, 106, 0.2);
+  padding: 16px;
+  border-radius: var(--radius-md);
+}
+
+.danger-action h4 {
+  margin: 0 0 4px 0;
+  color: var(--color-text-primary);
+}
+
+.danger-action .settings-desc {
+  margin: 0;
+}
+
+.btn-danger {
+  background: var(--color-error);
+  color: #fff;
+  border: none;
+  font-weight: bold;
+}
+
+.btn-danger:hover {
+  background: #ff6b80;
+}
