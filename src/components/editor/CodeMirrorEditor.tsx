@@ -68,6 +68,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         extEditorTheme,
         extHighlightStyle,
         EditorView.lineWrapping,
+        EditorView.contentAttributes.of({ spellcheck: "true" }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged && onChangeRef.current) {
             const newContent = update.state.doc.toString();
