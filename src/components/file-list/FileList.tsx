@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -108,8 +108,19 @@ const FileListItem: React.FC<FileListItemProps> = ({
     zIndex: isDragging ? 100 : 1,
   };
 
+  useEffect(() => {
+    if (isActive) {
+      const el = document.getElementById(`file-item-${id}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        el.focus({ preventScroll: true });
+      }
+    }
+  }, [isActive, id]);
+
   return (
     <div
+      id={`file-item-${id}`}
       ref={setNodeRef}
       style={style}
       {...attributes}
@@ -189,6 +200,22 @@ export const FileList: React.FC<FileListProps> = ({
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 'c' && activeFileId) {
       onCopyFile(activeFileId);
+      return;
+    }
+
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault(); // Prevent scrolling
+      if (files.length === 0) return;
+
+      const currentIndex = files.findIndex(f => f.id === activeFileId);
+      
+      if (e.key === 'ArrowDown') {
+        const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, files.length - 1);
+        onFileSelect(files[nextIndex].id);
+      } else if (e.key === 'ArrowUp') {
+        const prevIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
+        onFileSelect(files[prevIndex].id);
+      }
     }
   };
 

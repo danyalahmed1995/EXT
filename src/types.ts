@@ -17,7 +17,7 @@ export interface FileItem {
   size: number;
   isFavorite: boolean;
   isPinned: boolean;
-  content: string; // the actual raw content
+  hasTodos?: boolean;
 }
 
 export type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'custom';

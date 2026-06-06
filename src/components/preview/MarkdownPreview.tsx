@@ -103,8 +103,9 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, absol
         'href', 'src', 'alt', 'title', 'target',
         'type', 'checked', 'disabled', 'class',
       ],
+      ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|cid|xmpp|asset|tauri):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
     });
-  }, [content]);
+  }, [content, absolutePath]);
 
   return (
     <div

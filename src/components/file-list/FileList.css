@@ -11,6 +11,11 @@
   user-select: none;
 }
 
+.file-list:focus,
+.file-list:focus-visible {
+  outline: none;
+}
+
 /* ── Header ─────────────────────────────────────── */
 
 .file-list-header {
@@ -84,6 +89,11 @@
   transition: all var(--transition-fast);
   position: relative;
   -webkit-user-drag: element;
+}
+
+.file-list-item:focus,
+.file-list-item:focus-visible {
+  outline: none;
 }
 
 .file-list-item:hover {

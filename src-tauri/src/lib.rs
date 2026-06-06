@@ -1,8 +1,27 @@
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use walkdir::WalkDir;
+use tauri::{
+    menu::{Menu, MenuItem},
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Manager,
+};
+
+fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBuf, String> {
+    let root = Path::new(workspace_path);
+    let joined = root.join(relative_path);
+    
+    // Normalize path to check for directory traversal
+    let joined_str = joined.to_string_lossy();
+    if joined_str.contains("..") {
+        eprintln!("SECURITY: Path traversal attempt blocked: {}", joined_str);
+        return Err("Path traversal detected".to_string());
+    }
+    
+    Ok(joined)
+}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -25,7 +44,7 @@ pub struct ScannedFile {
     pub size: u64,
     pub is_favorite: bool,
     pub is_pinned: bool,
-    pub content: String,
+    pub has_todos: bool,
 }
 
 #[tauri::command]
@@ -83,12 +102,13 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                     
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
                     
-                    // Only read content if file is < 2MB (2,097,152 bytes)
-                    let content = if size < 2 * 1024 * 1024 {
-                        fs::read_to_string(&entry_path).unwrap_or_default()
-                    } else {
-                        String::from("[File too large to preview full content inline]")
-                    };
+                    // Quick scan for TODOs without keeping content in memory
+                    let mut has_todos = false;
+                    if size > 0 && size < 2 * 1024 * 1024 {
+                        if let Ok(content) = fs::read_to_string(&entry_path) {
+                            has_todos = content.contains("TODO") || content.contains("- [ ]") || content.contains("- [x]") || content.contains("- [X]");
+                        }
+                    }
                     
                     counter += 1;
                     
@@ -104,7 +124,7 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                         size,
                         is_favorite: false,
                         is_pinned: false,
-                        content,
+                        has_todos,
                     });
                 }
             }
@@ -123,8 +143,7 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
 
 #[tauri::command]
 fn create_file(workspace_path: String, workspace_id: String, workspace_name: String, file_name: String) -> Result<ScannedFile, String> {
-    let root = Path::new(&workspace_path);
-    let file_path = root.join(&file_name);
+    let file_path = resolve_safe_path(&workspace_path, &file_name)?;
     
     // Check if the extension is valid
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
@@ -169,7 +188,7 @@ fn create_file(workspace_path: String, workspace_id: String, workspace_name: Str
         size,
         is_favorite: false,
         is_pinned: false,
-        content,
+        has_todos: false,
     })
 }
 
@@ -212,14 +231,13 @@ fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, Stri
         size,
         is_favorite: false,
         is_pinned: false,
-        content,
+        has_todos: false,
     })
 }
 
 #[tauri::command]
 fn save_file(workspace_path: String, relative_path: String, content: String) -> Result<String, String> {
-    let root = Path::new(&workspace_path);
-    let file_path = root.join(&relative_path);
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
     if !file_path.exists() {
         return Err("File does not exist".to_string());
@@ -242,10 +260,9 @@ fn save_file(workspace_path: String, relative_path: String, content: String) -> 
 
 #[tauri::command]
 fn move_file(source_workspace_path: String, target_workspace_path: String, relative_path: String) -> Result<ScannedFile, String> {
-    let source_root = Path::new(&source_workspace_path);
+    let source_path = resolve_safe_path(&source_workspace_path, &relative_path)?;
     let target_root = Path::new(&target_workspace_path);
     
-    let source_path = source_root.join(&relative_path);
     let file_name = source_path.file_name().unwrap_or_default();
     let target_path = target_root.join(file_name);
     
@@ -256,7 +273,7 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         return Err("Target file already exists".to_string());
     }
     
-    if let Err(e) = fs::rename(&source_path, &target_path) {
+    if let Err(_e) = fs::rename(&source_path, &target_path) {
         // Fallback to copy+remove if crossing mounts
         if let Err(e2) = fs::copy(&source_path, &target_path) {
             return Err(format!("Failed to move file: {}", e2));
@@ -275,7 +292,6 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
     };
     
     let size = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
-    let content = fs::read_to_string(&target_path).unwrap_or_default();
     
     Ok(ScannedFile {
         id: format!("moved-{}", Utc::now().timestamp_millis()), // ID will be updated on frontend
@@ -289,13 +305,12 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         size,
         is_favorite: false,
         is_pinned: false,
-        content,
+        has_todos: false, // Could be determined if we read it, but for move it's fine.
     })
 }
 #[tauri::command]
 fn delete_file(workspace_path: String, relative_path: String) -> Result<(), String> {
-    let root = Path::new(&workspace_path);
-    let file_path = root.join(&relative_path);
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
     if !file_path.exists() {
         return Err("File does not exist".to_string());
@@ -310,8 +325,7 @@ fn delete_file(workspace_path: String, relative_path: String) -> Result<(), Stri
 
 #[tauri::command]
 fn read_file(workspace_path: String, relative_path: String) -> Result<String, String> {
-    let root = Path::new(&workspace_path);
-    let file_path = root.join(&relative_path);
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
     if !file_path.exists() {
         return Err("File does not exist".to_string());
@@ -339,7 +353,7 @@ fn create_folder(workspace_path: String, relative_path: String, folder_name: Str
 #[tauri::command]
 fn rename_file(workspace_path: String, relative_path: String, new_name: String) -> Result<ScannedFile, String> {
     let root = Path::new(&workspace_path);
-    let source_path = root.join(&relative_path);
+    let source_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
     if !source_path.exists() {
         return Err("File does not exist".to_string());
@@ -365,12 +379,6 @@ fn rename_file(workspace_path: String, relative_path: String, new_name: String) 
     };
     
     let size = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
-    // Since we only rename .md/.txt, it's safe to optionally read
-    let content = if size < 2 * 1024 * 1024 && target_path.is_file() {
-        fs::read_to_string(&target_path).unwrap_or_default()
-    } else {
-        String::new()
-    };
     
     let new_relative_path = target_path.strip_prefix(root).unwrap_or(&target_path).to_string_lossy().to_string();
 
@@ -386,14 +394,13 @@ fn rename_file(workspace_path: String, relative_path: String, new_name: String) 
         size,
         is_favorite: false,
         is_pinned: false,
-        content,
+        has_todos: false,
     })
 }
 
 #[tauri::command]
 fn get_file_modified_time(workspace_path: String, relative_path: String) -> Result<String, String> {
-    let root = Path::new(&workspace_path);
-    let file_path = root.join(&relative_path);
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
     if !file_path.exists() {
         return Err("File does not exist".to_string());
@@ -410,10 +417,9 @@ fn get_file_modified_time(workspace_path: String, relative_path: String) -> Resu
 
 #[tauri::command]
 fn get_absolute_path(workspace_path: String, relative_path: String) -> Result<String, String> {
-    let root = Path::new(&workspace_path);
-    let mut file_path = root.join(&relative_path);
+    let mut file_path = resolve_safe_path(&workspace_path, &relative_path)?;
     
-    // Attempt to canonicalize to resolve `..` and `.` paths safely
+    // Attempt to canonicalize to resolve `.` paths safely
     if let Ok(canonical) = file_path.canonicalize() {
         file_path = canonical;
     }
@@ -504,12 +510,84 @@ fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn force_exit(app_handle: tauri::AppHandle) {
+    app_handle.exit(0);
+}
+
+#[tauri::command]
+fn force_restart(app_handle: tauri::AppHandle) {
+    app_handle.restart();
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, create_folder, rename_file, save_file, move_file, delete_file, reveal_in_explorer, read_file, copy_file_to_clipboard, get_file_modified_time, get_absolute_path, rename_workspace_folder])
+        .invoke_handler(tauri::generate_handler![
+            scan_directory, create_workspace, create_file, create_folder, rename_file, 
+            save_file, move_file, delete_file, reveal_in_explorer, read_file, 
+            copy_file_to_clipboard, get_file_modified_time, get_absolute_path, 
+            rename_workspace_folder, force_exit, force_restart
+        ])
+        .setup(|app| {
+            let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+            let restart_i = MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?;
+            let exit_i = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
+            
+            let menu = Menu::with_items(app, &[&open_i, &restart_i, &exit_i])?;
+
+            let mut tray_builder = TrayIconBuilder::new()
+                .menu(&menu)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "open" => {
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    "restart" => {
+                        let _ = app.emit("tray-restart-requested", ());
+                    }
+                    "exit" => {
+                        let _ = app.emit("tray-exit-requested", ());
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| match event {
+                    TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        ..
+                    } | TrayIconEvent::DoubleClick { .. } => {
+                        let app = tray.app_handle();
+                        if let Some(window) = app.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.unminimize();
+                            let _ = window.set_focus();
+                        }
+                    }
+                    _ => {}
+                });
+
+            if let Some(icon) = app.default_window_icon() {
+                tray_builder = tray_builder.icon(icon.clone());
+            }
+
+            let _tray = tray_builder.build(app)?;
+
+            Ok(())
+        })
+        .on_window_event(|window, event| match event {
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                api.prevent_close();
+                let _ = window.hide();
+                println!("Window hidden to tray");
+            }
+            _ => {}
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

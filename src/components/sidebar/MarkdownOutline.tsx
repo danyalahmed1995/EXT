@@ -22,7 +22,7 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
     }
 
     const timer = setTimeout(() => {
-      const lines = content.split('\n');
+      const lines = content.split(/\r?\n/);
       const foundHeadings: Heading[] = [];
       const headingRegex = /^(#{1,6})\s+(.+)$/;
 
