@@ -10,13 +10,14 @@
   /* ----------------------------------------------------------
      Colors — Background & Surfaces (Glassmorphism)
      ---------------------------------------------------------- */
-  --color-bg: transparent;
+  --color-bg: #0f0f14;
   --color-surface: rgba(22, 22, 30, 0.45);
   --color-surface-elevated: rgba(28, 28, 39, 0.65);
   --color-surface-hover: rgba(34, 34, 46, 0.5);
   --color-sidebar: rgba(19, 19, 25, 0.35);
   --color-editor: rgba(22, 22, 30, 0.35);
   --color-preview: rgba(22, 22, 30, 0.35);
+  --color-code-bg: rgba(34, 34, 46, 0.5);
 
   /* ----------------------------------------------------------
      Glass Effects
@@ -59,6 +60,19 @@
   --color-success: #4dd695;
   --color-warning: #f5a623;
   --color-info: #5db8f5;
+
+  /* ----------------------------------------------------------
+     Colors — Syntax Highlighting (Default Dark)
+     ---------------------------------------------------------- */
+  --color-syntax-keyword: #c792ea;
+  --color-syntax-name: #e2e2e9;
+  --color-syntax-function: #82aaff;
+  --color-syntax-constant: #f78c6c;
+  --color-syntax-type: #ffcb6b;
+  --color-syntax-operator: #89ddff;
+  --color-syntax-comment: #606075;
+  --color-syntax-string: #c3e88d;
+  --color-syntax-invalid: #f5546a;
 
   /* ----------------------------------------------------------
      Typography — Font Families

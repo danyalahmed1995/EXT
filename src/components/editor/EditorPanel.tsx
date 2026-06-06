@@ -15,6 +15,7 @@ import {
   SettingsIcon,
 } from '../../icons/icons';
 import { MarkdownPreview } from '../preview/MarkdownPreview';
+import { ThemeDropdown } from '../theme/ThemeDropdown';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
@@ -165,6 +166,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                 Preview
               </button>
             </div>
+            <ThemeDropdown />
           </div>
         </div>
         <div className="editor-empty">
@@ -232,6 +234,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               Preview
             </button>
           </div>
+          <ThemeDropdown />
           <button
             className="editor-action-btn"
             onClick={onNewFile}

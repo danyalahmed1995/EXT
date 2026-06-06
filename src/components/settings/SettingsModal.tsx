@@ -22,11 +22,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRemoveA
         
         <div className="modal-body">
           <section className="settings-section">
-            <h3>Theme</h3>
-            <p className="settings-desc">EXT uses the system dark theme by default with a custom glassmorphism aesthetic.</p>
-          </section>
-
-          <section className="settings-section">
             <h3>Ignored Directories</h3>
             <p className="settings-desc">The following directories are skipped during workspace scanning to improve performance:</p>
             <div className="ignored-dirs-list">

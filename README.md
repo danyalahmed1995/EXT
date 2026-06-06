@@ -48,4 +48,7 @@ The resulting executable will be available in `src-tauri/target/release`.
 MIT License.
 
 ## Contributing
-Themes are powered by CSS variables. Feel free to modify `src/index.css` to craft new looks!
+Contributions are welcome.
+
+### Contributing Themes
+EXT supports a robust CSS variables-driven theme system. Visual contributors can easily add new built-in themes by defining a new set of token values. Please refer to the [Themes Documentation](docs/themes.md) for detailed instructions on adding or modifying themes without breaking application logic.
