@@ -80,6 +80,7 @@ interface FileListItemProps {
   onSelect: () => void;
   onToggleFavorite: () => void;
   onDelete: () => void;
+  onContextMenu?: (e: React.MouseEvent) => void;
 }
 
 const FileListItem: React.FC<FileListItemProps> = ({
@@ -93,6 +94,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
   onSelect,
   onToggleFavorite,
   onDelete,
+  onContextMenu,
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `file-${id}`,
@@ -114,6 +116,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
       {...listeners}
       className={`file-list-item ${isActive ? 'active' : ''}`}
       onClick={onSelect}
+      onContextMenu={onContextMenu}
     >
       <span 
         className="file-list-item-icon"
@@ -231,6 +234,7 @@ export const FileList: React.FC<FileListProps> = ({
                 onSelect={() => onFileSelect(file.id)}
                 onToggleFavorite={() => onToggleFavorite(file.id)}
                 onDelete={() => onDeleteFile(file.id)}
+                onContextMenu={(e) => onContextMenu?.(e, file.id)}
               />
             ))}
           </SortableContext>

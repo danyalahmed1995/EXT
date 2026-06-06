@@ -20,6 +20,7 @@ import {
   MarkdownIcon,
   FolderIcon,
 } from '../../icons/icons';
+import { MarkdownOutline } from './MarkdownOutline';
 import './Sidebar.css';
 
 // ── Types ────────────────────────────────────────────
@@ -45,6 +46,8 @@ interface SidebarProps {
   onOpenSettings: () => void;
   onSearch: (query: string, global: boolean) => void;
   onWorkspaceContextMenu?: (e: React.MouseEvent, workspaceId: string) => void;
+  activeFileContent?: string;
+  activeFileExtension?: string;
 }
 
 // ── Helper: Get workspace icon ──────────────────────
@@ -177,6 +180,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenSettings,
   onSearch,
   onWorkspaceContextMenu,
+  activeFileContent,
+  activeFileExtension,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGlobal, setSearchGlobal] = useState(false);
@@ -207,6 +212,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="sidebar-search-input-wrapper">
           <SearchIcon size={14} className="sidebar-search-icon" />
           <input
+            id="global-search-input"
             type="text"
             className="sidebar-search-input"
             placeholder="Search all files..."
@@ -291,6 +297,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             />
           ))}
         </SidebarSection>
+
+        {/* Outline */}
+        {(activeFileExtension === '.md' || activeFileExtension === '.markdown') && activeFileContent && (
+          <SidebarSection title="Outline" defaultExpanded={true}>
+            <MarkdownOutline content={activeFileContent} isMarkdown={true} />
+          </SidebarSection>
+        )}
       </div>
 
       {/* Bottom Area */}

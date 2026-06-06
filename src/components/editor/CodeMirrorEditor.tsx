@@ -102,6 +102,30 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   // We do not need to sync `content` back into the view on every change,
   // which causes cursor jumping and lag during fast typing.
 
+  useEffect(() => {
+    const handleScrollToLine = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { lineIndex } = customEvent.detail;
+      if (viewRef.current && typeof lineIndex === 'number') {
+        const view = viewRef.current;
+        // Make sure line is within bounds (1-indexed for CM)
+        const targetLine = Math.min(Math.max(1, lineIndex + 1), view.state.doc.lines);
+        const lineInfo = view.state.doc.line(targetLine);
+        
+        view.dispatch({
+          selection: { anchor: lineInfo.from, head: lineInfo.from },
+          effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' })
+        });
+        
+        // Optional: refocus the editor
+        view.focus();
+      }
+    };
+
+    window.addEventListener('editor-scroll-to-line', handleScrollToLine);
+    return () => window.removeEventListener('editor-scroll-to-line', handleScrollToLine);
+  }, []);
+
   return (
     <div className="codemirror-wrapper" ref={containerRef} />
   );

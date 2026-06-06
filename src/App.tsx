@@ -4,6 +4,7 @@ import { Sidebar } from './components/sidebar/Sidebar';
 import { FileList } from './components/file-list/FileList';
 import { EditorPanel, EditorTab, ViewMode } from './components/editor/EditorPanel';
 import { NewFileModal } from './components/modals/NewFileModal';
+import { RenameModal } from './components/modals/RenameModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu, ContextMenuItem } from './components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode } from './types';
@@ -30,6 +31,8 @@ function App() {
   const [searchGlobal, setSearchGlobal] = useState(false);
   const [showNewFileModal, setShowNewFileModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [renameFileTarget, setRenameFileTarget] = useState<{ id: string, name: string } | null>(null);
+  const [renameWorkspaceTarget, setRenameWorkspaceTarget] = useState<{ id: string, name: string, path: string } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -92,6 +95,7 @@ function App() {
             extension: first.extension,
             content: first.content,
             isDirty: false,
+            absolutePath: first.absolutePath,
           }]);
         } else {
           setActiveFileId(null);
@@ -258,6 +262,7 @@ function App() {
                 extension: file.extension,
                 content: content || file.content,
                 isDirty: false,
+                absolutePath: file.absolutePath,
               },
             ]);
           }).catch(() => {
@@ -270,6 +275,7 @@ function App() {
                 extension: file.extension,
                 content: file.content,
                 isDirty: false,
+                absolutePath: file.absolutePath,
               },
             ]);
           });
@@ -294,9 +300,13 @@ function App() {
 
   const handleContentChange = useCallback((tabId: string, content: string) => {
     setOpenTabs((tabs) =>
-      tabs.map((t) =>
-        t.id === tabId ? { ...t, content, isDirty: true } : t
-      )
+      tabs.map((t) => {
+        if (t.id === tabId) {
+          if (t.content === content) return t;
+          return { ...t, content, isDirty: true, saveStatus: 'unsaved' };
+        }
+        return t;
+      })
     );
   }, []);
 
@@ -469,12 +479,111 @@ function App() {
           extension: newFile.extension,
           content: newFile.content,
           isDirty: false,
+          saveStatus: 'saved',
+          absolutePath: newFile.absolutePath,
         },
       ]);
       setActiveFileId(newFile.id);
     } catch (err) {
       console.error('Failed to create file:', err);
       alert(`Failed to create file: ${err}`);
+    }
+  }, [workspaces]);
+
+  const openRenameFileModal = useCallback((fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (file) setRenameFileTarget({ id: file.id, name: file.name });
+  }, [files]);
+
+  const handleRenameFile = useCallback(async (newName: string) => {
+    if (!renameFileTarget) return;
+    const file = files.find(f => f.id === renameFileTarget.id);
+    const ws = workspaces.find(w => w.id === file?.workspaceId);
+    if (!file || !ws) return;
+
+    if (newName === file.name) return;
+
+    try {
+      const renamedFile: FileItem = await invoke('rename_file', {
+        workspacePath: ws.path,
+        relativePath: file.relativePath,
+        newName,
+      });
+
+      renamedFile.id = file.id;
+      renamedFile.workspaceId = ws.id;
+      renamedFile.workspace = ws.name;
+      renamedFile.isFavorite = file.isFavorite;
+
+      setFiles(prev => prev.map(f => f.id === file.id ? renamedFile : f));
+      setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, name: renamedFile.name, extension: renamedFile.extension } : t));
+    } catch (err) {
+      console.error('Failed to rename file:', err);
+      alert(`Failed to rename file: ${err}`);
+    }
+  }, [files, workspaces, renameFileTarget]);
+
+  const openRenameWorkspaceModal = useCallback((workspaceId: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (ws) setRenameWorkspaceTarget({ id: ws.id, name: ws.name, path: ws.path });
+  }, [workspaces]);
+
+  const handleRenameWorkspace = useCallback(async (newName: string) => {
+    if (!renameWorkspaceTarget) return;
+    try {
+      const newPath: string = await invoke('rename_workspace_folder', {
+        workspacePath: renameWorkspaceTarget.path,
+        newName,
+      });
+
+      // Update workspace path and name in state
+      setWorkspaces(prev => prev.map(w => w.id === renameWorkspaceTarget.id ? { ...w, name: newName, path: newPath } : w));
+      
+      // Update all files absolutePath and workspace
+      setFiles(prev => prev.map(f => {
+         if (f.workspaceId === renameWorkspaceTarget.id) {
+            const newAbsolute = f.absolutePath.replace(renameWorkspaceTarget.path, newPath);
+            return { ...f, workspace: newName, absolutePath: newAbsolute };
+         }
+         return f;
+      }));
+
+      // Update open tabs
+      setOpenTabs(prev => prev.map(t => {
+         const f = files.find(file => file.id === t.id);
+         if (f && f.workspaceId === renameWorkspaceTarget.id) {
+             const newAbsolute = t.absolutePath?.replace(renameWorkspaceTarget.path, newPath);
+             return { ...t, absolutePath: newAbsolute };
+         }
+         return t;
+      }));
+
+      showToast(`Workspace folder renamed to "${newName}"`);
+    } catch (err) {
+      console.error('Failed to rename workspace:', err);
+      alert(`Failed to rename workspace: ${err}`);
+    }
+  }, [renameWorkspaceTarget, files]);
+
+  const handleCreateFolder = useCallback(async (workspaceId: string) => {
+    const ws = workspaces.find(w => w.id === workspaceId);
+    if (!ws) return;
+
+    const folderName = window.prompt('Enter new folder name:');
+    if (!folderName) return;
+
+    try {
+      await invoke('create_folder', {
+        workspacePath: ws.path,
+        relativePath: '', // Can be extended to support nested creation
+        folderName,
+      });
+
+      // Simple refresh to show folder contents or empty folder behavior if needed
+      showToast(`Created folder "${folderName}". Files added to it will appear in the workspace.`);
+    } catch (err) {
+      console.error('Failed to create folder:', err);
+      alert(`Failed to create folder: ${err}`);
     }
   }, [workspaces]);
 
@@ -528,6 +637,8 @@ function App() {
 
     if (!tab || !file || !workspace || !tab.isDirty) return;
 
+    setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'saving' } : t)));
+
     try {
       const modifiedAt = await invoke('save_file', {
         workspacePath: workspace.path,
@@ -544,11 +655,12 @@ function App() {
 
       // Clear dirty flag
       setOpenTabs((prev) =>
-        prev.map((t) => (t.id === tab.id ? { ...t, isDirty: false } : t))
+        prev.map((t) => (t.id === tab.id ? { ...t, isDirty: false, saveStatus: 'saved' } : t))
       );
     } catch (err) {
       console.error('Failed to save file:', err);
-      alert(`Failed to save file: ${err}`);
+      setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'error' } : t)));
+      showToast(`Failed to save file: ${err}`);
     }
   }, [openTabs, files, workspaces]);
 
@@ -629,50 +741,144 @@ function App() {
     return () => window.removeEventListener('editor-context-menu', handleEditorContextMenu);
   }, [handleSaveFile]);
 
+  // ── Keyboard Shortcuts ─────────────────────────────────
+
+  useEffect(() => {
+    const handleGlobalKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey)) {
+        if (e.key === 's') {
+          e.preventDefault();
+          if (activeFileId) handleSaveFile(activeFileId);
+        } else if (e.key === 'n' && !e.shiftKey) {
+          e.preventDefault();
+          setShowNewFileModal(true);
+        } else if (e.key === 'n' && e.shiftKey) {
+          e.preventDefault();
+          // Prompt for folder in currently active workspace (or first workspace if none)
+          const wsId = activeView.startsWith('ws-') ? activeView.replace('ws-', '') : workspaces[0]?.id;
+          if (wsId) {
+            handleCreateFolder(wsId);
+          }
+        } else if (e.key === 'p') {
+          e.preventDefault();
+          document.getElementById('global-search-input')?.focus();
+        }
+      } else if (e.key === 'F2') {
+        if (activeFileId) {
+          openRenameFileModal(activeFileId);
+        } else if (activeView.startsWith('ws-')) {
+          openRenameWorkspaceModal(activeView.replace('ws-', ''));
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleGlobalKeyDown);
+    return () => window.removeEventListener('keydown', handleGlobalKeyDown);
+  }, [activeFileId, handleSaveFile, activeView, workspaces, handleCreateFolder]);
+
+  // ── External File Change Detection ──────────────────────
+
+  const handleWindowFocus = useCallback(async () => {
+    if (!activeFileId) return;
+    const file = files.find(f => f.id === activeFileId);
+    const tab = openTabs.find(t => t.id === activeFileId);
+    const ws = workspaces.find(w => w.id === file?.workspaceId);
+    
+    if (!file || !tab || !ws) return;
+    
+    try {
+      const diskModifiedTime = await invoke<string>('get_file_modified_time', {
+        workspacePath: ws.path,
+        relativePath: file.relativePath
+      });
+      
+      if (new Date(diskModifiedTime).getTime() > new Date(file.modifiedAt).getTime()) {
+        if (tab.isDirty) {
+          const confirmed = await ask('This file changed outside EXT. Reloading will replace your unsaved changes.', {
+            title: 'External Modification',
+            kind: 'warning',
+            okLabel: 'Reload from disk',
+            cancelLabel: 'Keep current version'
+          });
+          
+          if (confirmed) {
+            const newContent = await invoke<string>('read_file', {
+              workspacePath: ws.path,
+              relativePath: file.relativePath
+            });
+            setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
+            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, isDirty: false, saveStatus: 'saved' } : t));
+          } else {
+            setFiles(prev => prev.map(f => f.id === file.id ? { ...f, modifiedAt: diskModifiedTime } : f));
+          }
+        } else {
+          const newContent = await invoke<string>('read_file', {
+            workspacePath: ws.path,
+            relativePath: file.relativePath
+          });
+          setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
+          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent } : t));
+        }
+      }
+    } catch (e) {
+      console.error('Error checking external modification', e);
+    }
+  }, [activeFileId, files, openTabs, workspaces]);
+
+  useEffect(() => {
+    const unlisten = listen('tauri://focus', handleWindowFocus);
+    return () => { unlisten.then(u => u()); };
+  }, [handleWindowFocus]);
+
   const handleFileListContextMenu = useCallback((e: React.MouseEvent, fileId?: string) => {
     e.preventDefault();
     if (!fileId) return;
     
-    const file = files.find(f => f.id === fileId);
-    const workspace = workspaces.find(w => w.id === file?.workspaceId);
-
-    if (!file || !workspace) return;
+    // Select the file that was right-clicked
+    handleFileSelect(fileId);
 
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
       items: [
-        {
-          label: 'New File',
-          shortcut: 'Ctrl+N',
-          onClick: () => setShowNewFileModal(true)
+        { label: 'New File', onClick: () => setShowNewFileModal(true), shortcut: 'Ctrl+N' },
+        { label: 'Reveal in File Explorer', onClick: async () => {
+            const file = files.find(f => f.id === fileId);
+            const workspace = workspaces.find(w => w.id === file?.workspaceId);
+            if (file && workspace) {
+              await invoke('reveal_in_explorer', { workspacePath: workspace.path, relativePath: file.relativePath }).catch(err => console.error(err));
+            }
+          } 
         },
-        {
-          label: 'Reveal in File Explorer',
-          onClick: async () => {
-            try {
-              await invoke('reveal_in_explorer', {
-                workspacePath: workspace.path,
-                relativePath: file.relativePath
-              });
-            } catch (err) {
-              console.error('Failed to reveal in explorer', err);
+        { label: 'Rename', onClick: () => openRenameFileModal(fileId) },
+        { label: 'Copy Path', onClick: () => handleCopyFile(fileId) },
+        { divider: true, onClick: () => {} },
+        { label: 'Delete', onClick: () => handleDeleteFile(fileId) },
+      ]
+    });
+  }, [files, workspaces, handleDeleteFile, handleCopyFile, handleFileSelect, openRenameFileModal]);
+
+  const handleWorkspaceContextMenu = useCallback((e: React.MouseEvent, workspaceId: string) => {
+    e.preventDefault();
+    
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      items: [
+        { label: 'Reveal in File Explorer', onClick: async () => {
+            const ws = workspaces.find(w => w.id === workspaceId);
+            if (ws) {
+              await invoke('reveal_in_explorer', { workspacePath: ws.path, relativePath: null }).catch(err => console.error(err));
             }
           }
         },
-        {
-          label: 'Copy',
-          shortcut: 'Ctrl+C',
-          onClick: () => handleCopyFile(fileId)
-        },
+        { label: 'New Folder', onClick: () => handleCreateFolder(workspaceId), shortcut: 'Ctrl+Shift+N' },
+        { label: 'Rename Workspace', onClick: () => openRenameWorkspaceModal(workspaceId) },
         { divider: true, onClick: () => {} },
-        {
-          label: 'Delete',
-          onClick: () => handleDeleteFile(fileId)
-        }
-      ],
+        { label: 'Remove Workspace', onClick: () => handleRemoveWorkspace(workspaceId) },
+      ]
     });
-  }, [files, workspaces, handleDeleteFile]);
+  }, [workspaces, handleCreateFolder, handleRemoveWorkspace, openRenameWorkspaceModal]);
 
   const handleFileListDrop = useCallback((draggedId: string, targetId: string) => {
     // Reorder the current filtered view
@@ -753,29 +959,9 @@ function App() {
               setSearchQuery(query);
               setSearchGlobal(global);
             }}
-            onWorkspaceContextMenu={(e, workspaceId) => {
-              e.preventDefault();
-              setContextMenu({
-                x: e.clientX,
-                y: e.clientY,
-                items: [
-                  {
-                    label: 'Reveal in File Explorer',
-                    onClick: async () => {
-                      const ws = workspaces.find(w => w.id === workspaceId);
-                      if (ws) {
-                        await invoke('reveal_in_explorer', { workspacePath: ws.path, relativePath: null });
-                      }
-                    }
-                  },
-                  { divider: true, onClick: () => {} },
-                  {
-                    label: 'Remove Workspace',
-                    onClick: () => handleRemoveWorkspace(workspaceId)
-                  }
-                ]
-              });
-            }}
+            onWorkspaceContextMenu={handleWorkspaceContextMenu}
+            activeFileContent={openTabs.find(t => t.id === activeFileId)?.content}
+            activeFileExtension={openTabs.find(t => t.id === activeFileId)?.extension}
           />
         }
         fileList={
@@ -798,7 +984,7 @@ function App() {
             onToggleFavorite={handleToggleFavorite}
             onDeleteFile={handleDeleteFile}
             onCopyFile={handleCopyFile}
-            onContextMenu={(e, fileId) => handleFileListContextMenu(e, fileId)}
+            onContextMenu={handleFileListContextMenu}
           />
         }
         editor={
@@ -826,6 +1012,29 @@ function App() {
           onCreate={handleCreateFile}
         />
       )}
+      {/* Rename File Modal */}
+      {renameFileTarget && (
+        <RenameModal
+          title="Rename File"
+          description="Enter a new name for the file."
+          initialName={renameFileTarget.name}
+          onClose={() => setRenameFileTarget(null)}
+          onSubmit={handleRenameFile}
+        />
+      )}
+
+      {/* Rename Workspace Modal */}
+      {renameWorkspaceTarget && (
+        <RenameModal
+          title="Rename Workspace"
+          description="Enter a new name for the workspace folder. This will rename the folder on your disk."
+          initialName={renameWorkspaceTarget.name}
+          onClose={() => setRenameWorkspaceTarget(null)}
+          onSubmit={handleRenameWorkspace}
+        />
+      )}
+
+      {/* Settings Modal */}
       {showSettingsModal && (
         <SettingsModal
           onClose={() => setShowSettingsModal(false)}

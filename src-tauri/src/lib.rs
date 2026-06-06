@@ -321,6 +321,126 @@ fn read_file(workspace_path: String, relative_path: String) -> Result<String, St
 }
 
 #[tauri::command]
+fn create_folder(workspace_path: String, relative_path: String, folder_name: String) -> Result<(), String> {
+    let root = Path::new(&workspace_path);
+    let mut dir_path = root.to_path_buf();
+    if !relative_path.is_empty() {
+        dir_path = dir_path.join(&relative_path);
+    }
+    dir_path = dir_path.join(&folder_name);
+
+    if dir_path.exists() {
+        return Err("Folder already exists".to_string());
+    }
+
+    fs::create_dir_all(&dir_path).map_err(|e| format!("Failed to create folder: {}", e))
+}
+
+#[tauri::command]
+fn rename_file(workspace_path: String, relative_path: String, new_name: String) -> Result<ScannedFile, String> {
+    let root = Path::new(&workspace_path);
+    let source_path = root.join(&relative_path);
+    
+    if !source_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let target_path = source_path.with_file_name(&new_name);
+
+    if target_path.exists() && source_path != target_path {
+        return Err("A file with the new name already exists".to_string());
+    }
+
+    if let Err(e) = fs::rename(&source_path, &target_path) {
+        return Err(format!("Failed to rename file: {}", e));
+    }
+
+    let ext = target_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let modified_at = match fs::metadata(&target_path).and_then(|m| m.modified()) {
+        Ok(sys_time) => {
+            let dt: DateTime<Utc> = sys_time.into();
+            dt.to_rfc3339()
+        }
+        Err(_) => Utc::now().to_rfc3339(),
+    };
+    
+    let size = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
+    // Since we only rename .md/.txt, it's safe to optionally read
+    let content = if size < 2 * 1024 * 1024 && target_path.is_file() {
+        fs::read_to_string(&target_path).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    
+    let new_relative_path = target_path.strip_prefix(root).unwrap_or(&target_path).to_string_lossy().to_string();
+
+    Ok(ScannedFile {
+        id: format!("renamed-{}", Utc::now().timestamp_millis()), // ID handled on frontend
+        workspace_id: String::new(),
+        name: new_name.clone(),
+        extension: format!(".{}", ext.to_lowercase()),
+        workspace: String::new(),
+        absolute_path: target_path.to_string_lossy().to_string(),
+        relative_path: new_relative_path.replace("\\", "/"),
+        modified_at,
+        size,
+        is_favorite: false,
+        is_pinned: false,
+        content,
+    })
+}
+
+#[tauri::command]
+fn get_file_modified_time(workspace_path: String, relative_path: String) -> Result<String, String> {
+    let root = Path::new(&workspace_path);
+    let file_path = root.join(&relative_path);
+    
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+    
+    match fs::metadata(&file_path).and_then(|m| m.modified()) {
+        Ok(sys_time) => {
+            let dt: DateTime<Utc> = sys_time.into();
+            Ok(dt.to_rfc3339())
+        }
+        Err(e) => Err(format!("Failed to get modified time: {}", e)),
+    }
+}
+
+#[tauri::command]
+fn get_absolute_path(workspace_path: String, relative_path: String) -> Result<String, String> {
+    let root = Path::new(&workspace_path);
+    let mut file_path = root.join(&relative_path);
+    
+    // Attempt to canonicalize to resolve `..` and `.` paths safely
+    if let Ok(canonical) = file_path.canonicalize() {
+        file_path = canonical;
+    }
+    
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
+fn rename_workspace_folder(workspace_path: String, new_name: String) -> Result<String, String> {
+    let source_path = Path::new(&workspace_path);
+    if !source_path.exists() {
+        return Err("Workspace folder does not exist".to_string());
+    }
+    
+    let target_path = source_path.with_file_name(&new_name);
+    if target_path.exists() && source_path != target_path {
+        return Err("A folder with the new name already exists".to_string());
+    }
+    
+    if let Err(e) = fs::rename(&source_path, &target_path) {
+        return Err(format!("Failed to rename workspace folder: {}", e));
+    }
+    
+    Ok(target_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> Result<(), String> {
     let mut path = Path::new(&workspace_path).to_path_buf();
     
@@ -389,7 +509,7 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, save_file, move_file, delete_file, reveal_in_explorer, read_file, copy_file_to_clipboard])
+        .invoke_handler(tauri::generate_handler![scan_directory, create_workspace, create_file, create_folder, rename_file, save_file, move_file, delete_file, reveal_in_explorer, read_file, copy_file_to_clipboard, get_file_modified_time, get_absolute_path, rename_workspace_folder])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

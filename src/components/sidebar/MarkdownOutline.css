@@ -1,0 +1,33 @@
+.markdown-outline {
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+  max-height: 250px;
+}
+
+.markdown-outline-item {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 4px 6px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  line-height: 1.4;
+}
+
+.markdown-outline-item:hover {
+  background-color: var(--color-surface-hover);
+  color: var(--color-text);
+}
+
+.markdown-outline-item.level-1 {
+  font-weight: 600;
+  color: var(--color-text);
+  margin-top: 4px;
+}

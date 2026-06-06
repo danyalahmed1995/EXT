@@ -21,6 +21,7 @@ import './EditorPanel.css';
 // ── Types ────────────────────────────────────────────
 
 export type ViewMode = 'editor' | 'split' | 'preview';
+export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
 
 export interface EditorTab {
   id: string;
@@ -28,6 +29,8 @@ export interface EditorTab {
   extension: string;
   content: string;
   isDirty: boolean;
+  saveStatus?: SaveStatus;
+  absolutePath?: string;
 }
 
 interface EditorPanelProps {
@@ -267,7 +270,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
         {(viewMode === 'preview' || viewMode === 'split') && isMarkdown && (
           <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
-            <MarkdownPreview content={activeTab.content} />
+            <MarkdownPreview content={activeTab.content} absolutePath={activeTab.absolutePath} />
           </div>
         )}
 
@@ -290,6 +293,9 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         </span>
         <span className="editor-statusbar-item">{lineCount} lines</span>
         <span className="editor-statusbar-item">{charCount} chars</span>
+        <span className="editor-statusbar-item" style={{ color: activeTab.saveStatus === 'error' ? 'var(--color-error)' : activeTab.saveStatus === 'saving' ? 'var(--color-accent)' : activeTab.isDirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
+          {activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
+        </span>
         <div className="editor-statusbar-spacer" />
         <span className="editor-statusbar-item">
           {activeTab.extension.replace('.', '').toUpperCase()}

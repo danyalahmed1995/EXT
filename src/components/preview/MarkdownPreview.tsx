@@ -1,6 +1,7 @@
 import React, { useMemo } from 'react';
 import markdownit from 'markdown-it';
 import DOMPurify from 'dompurify';
+import { convertFileSrc } from '@tauri-apps/api/core';
 import './MarkdownPreview.css';
 
 // ── Markdown-it Instance ────────────────────────────
@@ -35,17 +36,56 @@ md.renderer.rules.list_item_open = function (tokens, idx, options, env, self) {
   return defaultRender(tokens, idx, options, env, self);
 };
 
+// Custom rule: resolve local image paths
+const defaultImageRender = md.renderer.rules.image || function (tokens, idx, options, _env, self) {
+  return self.renderToken(tokens, idx, options);
+};
+
+md.renderer.rules.image = function (tokens, idx, options, env, self) {
+  const token = tokens[idx];
+  const srcIndex = token.attrIndex('src');
+  
+  if (srcIndex >= 0 && env.absolutePath) {
+    const originalSrc = token.attrs![srcIndex][1];
+    
+    if (!originalSrc.startsWith('http') && !originalSrc.startsWith('data:')) {
+       const basePath = env.absolutePath as string;
+       const isWin = basePath.includes('\\');
+       const sep = isWin ? '\\' : '/';
+       const dirPath = basePath.substring(0, basePath.lastIndexOf(sep));
+       
+       let resultPath = dirPath;
+       const parts = originalSrc.split('/');
+       for (const part of parts) {
+         if (part === '.') continue;
+         if (part === '..') {
+           const lastSepIndex = resultPath.lastIndexOf(sep);
+           if (lastSepIndex > 0) {
+             resultPath = resultPath.substring(0, lastSepIndex);
+           }
+         } else if (part) {
+           resultPath += sep + part;
+         }
+       }
+       
+       token.attrs![srcIndex][1] = convertFileSrc(resultPath);
+    }
+  }
+  return defaultImageRender(tokens, idx, options, env, self);
+};
+
 // ── Types ────────────────────────────────────────────
 
 interface MarkdownPreviewProps {
   content: string;
+  absolutePath?: string;
 }
 
 // ── MarkdownPreview Component ───────────────────────
 
-export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content }) => {
+export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, absolutePath }) => {
   const renderedHtml = useMemo(() => {
-    const rawHtml = md.render(content);
+    const rawHtml = md.render(content, { absolutePath });
     return DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
