@@ -1,65 +1,315 @@
-# EXT Architecture & Design Document
+# EXT Design
 
-This document provides a high-level overview of how EXT is structured. It is intended for developers who wish to understand the codebase, contribute new features, or fix bugs.
+This document explains how EXT is structured and how contributors should think about the codebase.
 
-## Overview
-EXT is built using the **Tauri** framework. This means the application has two entirely separate layers that communicate via asynchronous Inter-Process Communication (IPC):
-1. **Frontend**: A React application built with TypeScript and bundled by Vite.
-2. **Backend**: A native Rust application that handles secure file system operations.
+EXT is a local-first desktop workspace for `.md` and `.txt` files. The main rule is simple: keep the app fast, understandable, and respectful of files on disk.
 
----
+## Goals
 
-## 1. Frontend Architecture (`/src`)
+EXT should:
 
-The frontend is responsible for the user interface, state management, and rendering text.
+- read and write real files directly
+- avoid proprietary storage
+- stay lightweight
+- keep Markdown and text workflows simple
+- feel polished without becoming heavy
+- handle large folders and large files carefully
+- fail safely when filesystem operations go wrong
 
-### `src/App.tsx` & `src/components/layout/AppShell.tsx`
-These files compose the main layout of the application. `App.tsx` handles the assembly of the various modals, context menus, and the core `AppShell`. The `AppShell` defines the physical boundaries of the screen (sidebar on the left, file list in the middle, editor on the right).
+EXT should not become a cloud notes platform, collaboration suite, plugin host, AI workspace, or publishing service.
 
-### `src/hooks/useAppLogic.ts`
-**This is the most critical file in the frontend.** 
-It is a massive custom hook that acts as the central brain of the application. It holds all global state, including:
-- The currently loaded `files` and configured `workspaces`.
-- The `activeView` (e.g., specific workspace, 'favorites', 'recent', 'allMarkdown').
-- Complex `useMemo` filters that derive `filteredFiles` so the UI remains highly performant during typing.
-- All event handlers for creating, deleting, dragging, and renaming files.
+## Architecture overview
 
-*Note for contributors: If you are adding a new core behavior, you will likely need to update `useAppLogic.ts`. Keep performance in mind and heavily utilize `useMemo` and `useCallback` to prevent cascading re-renders.*
+EXT uses Tauri v2.
 
-### Editor Components (`src/components/editor`)
-- **`CodeMirrorEditor.tsx`**: A wrapper around CodeMirror 6. It handles native spellchecking, theme injection, syntax highlighting, and synchronizing text changes back to `useAppLogic`.
-- **`EditorPanel.tsx`**: Manages the horizontal tab bar above the editor, allowing users to switch between multiple open files.
+The app has two main layers:
 
-### Preview Components (`src/components/preview`)
-- **`MarkdownPreview.tsx`**: Takes raw text and converts it into safe HTML using `markdown-it`. It heavily relies on `DOMPurify` to sanitize outputs to prevent Cross-Site Scripting (XSS) attacks.
+1. Frontend: React, TypeScript, Vite, CodeMirror, Markdown rendering, app state, and UI.
+2. Backend: Rust commands for filesystem access, workspace scanning, path safety, window/tray behavior, and local setup tasks.
 
-### Navigation Components (`src/components/file-list` & `src/components/sidebar`)
-- **`FileList.tsx`**: Renders the vertical list of files based on the `filteredFiles` state. Uses `@dnd-kit` to allow users to drag and drop files into a custom sort order. Wrapped in `React.memo` to prevent stuttering while the user types in the editor.
-- **`Sidebar.tsx`**: Renders the leftmost navigation panel.
+The frontend talks to the backend through Tauri commands. Filesystem work should stay on the Rust side when possible.
 
----
+## Frontend
 
-## 2. Backend Architecture (`/src-tauri/src`)
+### App shell
 
-The Rust backend has one primary purpose: securely interact with the operating system's file system at native speeds.
+Main layout responsibilities are split across the top-level app and layout components.
 
-### `lib.rs`
-All Tauri commands are exposed here. These commands are called asynchronously from the React frontend.
+The app shell owns the visible structure:
 
-**Key Functions:**
-- **`scan_directory`**: Uses the `walkdir` crate to recursively read all files inside a registered workspace folder. It automatically ignores noisy directories like `.git` and `node_modules` to ensure extreme speed and low memory usage. It returns file metadata (size, modified time, extension).
-- **`resolve_safe_path`**: A critical security function. Before *any* file operation (read, write, delete) occurs, the requested path is passed through this function to prevent Directory Traversal attacks (e.g., attempting to read `../../../etc/passwd`).
-- **File Operations**: Functions like `save_file`, `read_file`, `delete_file`, and `create_folder` act as wrappers around standard Rust `std::fs` operations, returning standard `Result` objects back to the frontend.
+- sidebar
+- smart views
+- workspace list
+- file list
+- editor area
+- preview area
+- tabs
+- dialogs
+- context menus
+- settings
 
----
+The layout should stay predictable. Avoid hiding core behavior inside unrelated components.
 
-## 3. Styling & Themes
+### App state
 
-EXT deliberately avoids utility-class frameworks like TailwindCSS to keep the DOM clean.
-Instead, it relies entirely on **Vanilla CSS Custom Properties (Variables)** for its design system.
+Core app state is handled through the main app logic hook and related utilities.
 
-- **`src/styles/design-system.css`**: Defines all base spacing, typography, and structure.
-- **`src/styles/themes/`**: Contains various CSS files defining color palettes (e.g., `dark-glass.css`, `light-minimal.css`).
-- Components have dedicated `.css` files (e.g., `FileList.css`) that consume these variables.
+State includes:
 
-To add a new theme or modify visual aesthetics, simply adjust the CSS variables. Do not hardcode HEX or RGB colors directly into component CSS files.
+- connected workspaces
+- scanned files
+- active view
+- active file
+- open tabs or recent files
+- favorites
+- editor content
+- save state
+- dirty state
+- Markdown outline
+- preview/editor mode
+- theme
+- visual settings
+- system settings persisted across restarts
+
+Keep one clear source of truth for each state value. Avoid duplicating paths, selected files, or active workspace data in multiple places unless there is a clear reason.
+
+### File list and smart views
+
+The file list is derived from scanned workspace data.
+
+Smart views should be treated as filters over the same file model:
+
+- Recent
+- Favorites
+- All Markdown
+- All Text
+- Modified Today
+- TODOs
+
+Filtering should be memoized where it matters. Typing in the editor should not cause expensive file list work.
+
+### Editor
+
+The editor is built around CodeMirror 6.
+
+Editor requirements:
+
+- do not recreate the editor instance unnecessarily
+- keep typing smooth
+- debounce expensive side effects
+- keep autosave safe
+- preserve unsaved content during file switching and external-change prompts
+- dispose editor resources correctly
+
+The editor should support plain text and Markdown without assuming every file is Markdown.
+
+### Preview
+
+Markdown preview is rendered from the current editor content.
+
+Preview requirements:
+
+- sanitize rendered HTML with DOMPurify
+- support GitHub-Flavored Markdown behavior where configured
+- resolve local image paths from the current Markdown file directory
+- show a safe broken-image state when paths are missing
+- avoid expensive re-rendering on every keystroke for large documents
+- keep Preview Only, Editor Only, and Split View modes stable
+
+Remote image fetching should not be added unless it is explicitly reviewed from a security and privacy angle.
+
+### Outline
+
+The outline is a navigation helper for Markdown files.
+
+It should parse headings and expose jump targets. It should not become a backlinks system, graph view, tag database, or knowledge-management layer.
+
+Outline parsing should be debounced for large documents.
+
+### Themes and visual effects
+
+EXT uses CSS custom properties for its design system.
+
+Rules:
+
+- use theme variables
+- avoid hardcoded colors in components
+- respect reduced-motion settings
+- keep animations short
+- do not animate CodeMirror internals in a way that hurts typing
+- keep effects configurable from settings
+
+Theme changes and view transitions should feel smooth but must not block core interaction.
+
+### Settings persistence
+
+Settings should survive restarts and recover from bad data.
+
+Persisted data may include:
+
+- workspaces
+- favorites
+- recent files
+- active theme
+- visual settings
+- close-to-tray behavior
+- editor/view preferences
+
+If persisted data is missing, invalid, or stale, use defaults and keep the app running.
+
+## Backend
+
+The Rust backend owns filesystem and native desktop behavior.
+
+### Tauri commands
+
+Commands should be small and explicit. Prefer typed request/response structures over loose data.
+
+Common command groups:
+
+- scan workspace
+- read file
+- save file
+- create file
+- create folder
+- rename file
+- delete file
+- reveal in file explorer
+- resolve preview asset paths
+- load/save settings
+- initialize example workspace
+
+### Workspace scanning
+
+Workspace scanning should:
+
+- include only `.md` and `.txt` files
+- ignore noisy directories such as `.git`, `node_modules`, `.next`, build folders, and dependency folders
+- return metadata needed by the frontend
+- avoid unnecessary full rescans
+- handle permission errors without crashing
+
+### Path safety
+
+Every filesystem operation must validate paths.
+
+Rules:
+
+- file operations must stay inside connected workspaces unless the operation is explicitly safe
+- reject path traversal attempts
+- normalize paths before comparing
+- handle symlinks carefully
+- return structured errors to the frontend
+- do not use `unwrap()` or `expect()` in normal production paths
+
+### File operations
+
+File operations should be defensive.
+
+Handle:
+
+- missing files
+- deleted folders
+- permission denied
+- rename collisions
+- invalid file names
+- external modifications
+- failed saves
+
+The frontend should receive enough information to show a useful error without exposing file contents.
+
+### System tray and window lifecycle
+
+The close button may hide the app to the system tray instead of quitting.
+
+The tray menu supports:
+
+- Open
+- Restart
+- Exit
+
+The backend/window layer must distinguish between:
+
+- close-to-tray
+- real exit
+- restart
+
+Do not let the tray Exit action get intercepted by the normal close-to-tray handler.
+
+### Logging
+
+Logging is local only.
+
+Logs may include:
+
+- operation name
+- timestamp
+- error kind
+- affected path when useful
+
+Logs must not include document contents. No analytics or telemetry should be added.
+
+## Security
+
+Security rules:
+
+- sanitize Markdown preview HTML
+- validate all local paths
+- keep destructive operations inside connected workspaces
+- do not fetch remote content by default
+- do not upload user files
+- do not add telemetry
+- do not log document contents
+
+## Performance
+
+EXT should feel light even with large workspaces.
+
+Watch for:
+
+- unnecessary rescans
+- repeated Markdown rendering
+- repeated outline parsing
+- unnecessary React re-renders
+- large arrays rebuilt during typing
+- leaked event listeners
+- leaked file watchers
+- stale timers or animation frames
+- CodeMirror instances not disposed
+
+Use memoization, debouncing, and cleanup where they clearly help. Do not add complex abstractions for small gains.
+
+## Continuous integration
+
+The repository uses GitHub Actions to check frontend and backend changes.
+
+Frontend checks include:
+
+- dependency install
+- tests
+- production build
+
+Backend checks include:
+
+- Rust toolchain setup
+- Tauri system dependencies on Linux runners
+- `cargo fmt --check`
+- `cargo clippy -- -D warnings`
+- `cargo test`
+
+CI should stay strict enough to catch broken builds and careless changes before review.
+
+## Contribution expectations
+
+Before changing core behavior, read this file and `CONTRIBUTING.md`.
+
+Good changes are:
+
+- small
+- testable
+- easy to review
+- consistent with local-first scope
+- careful with filesystem safety
+- honest about tradeoffs
+
+Avoid broad rewrites unless there is a clear bug or maintenance reason.
