@@ -187,7 +187,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
 
 // ── Sidebar Component ───────────────────────────────
 
-export const Sidebar: React.FC<SidebarProps> = ({
+export const Sidebar: React.FC<SidebarProps> = React.memo(({
   workspaces,
   smartViewCounts,
   activeView,
@@ -337,4 +337,4 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
     </div>
   );
-};
+});

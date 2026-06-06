@@ -83,9 +83,12 @@ interface MarkdownPreviewProps {
 
 // ── MarkdownPreview Component ───────────────────────
 
-export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, absolutePath }) => {
+export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ content, absolutePath }) => {
   const renderedHtml = useMemo(() => {
     const rawHtml = md.render(content, { absolutePath });
+    // [SECURITY] DOMPurify prevents XSS (Cross-Site Scripting) attacks by sanitizing the raw HTML.
+    // It strips out any <script> tags, inline event handlers (onclick, onerror), and malicious URIs
+    // while preserving safe styling and semantic tags required for markdown rendering.
     return DOMPurify.sanitize(rawHtml, {
       ALLOWED_TAGS: [
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
@@ -108,9 +111,11 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = ({ content, absol
   }, [content, absolutePath]);
 
   return (
-    <div
-      className="markdown-preview"
-      dangerouslySetInnerHTML={{ __html: renderedHtml }}
-    />
+    <div className="markdown-preview">
+      <div 
+        className="markdown-preview-inner"
+        dangerouslySetInnerHTML={{ __html: renderedHtml }}
+      />
+    </div>
   );
-};
+});

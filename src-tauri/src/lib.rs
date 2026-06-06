@@ -485,7 +485,7 @@ fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> 
     #[cfg(target_os = "linux")]
     {
         // For linux, there's no standard way to select a file, so we open the parent dir
-        let dir = if path.is_file() { path.parent().unwrap() } else { &path };
+        let dir = if path.is_file() { path.parent().unwrap_or(&path) } else { &path };
         std::process::Command::new("xdg-open")
             .arg(dir)
             .spawn()

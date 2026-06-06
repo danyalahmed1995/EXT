@@ -194,7 +194,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
 
 // ── FileList Component ──────────────────────────────
 
-export const FileList: React.FC<FileListProps> = ({
+export const FileList: React.FC<FileListProps> = React.memo(({
   title,
   files,
   activeFileId,
@@ -307,4 +307,4 @@ export const FileList: React.FC<FileListProps> = ({
       )}
     </div>
   );
-};
+});

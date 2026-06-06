@@ -21,6 +21,8 @@ export const extEditorTheme: Extension = EditorView.theme(
       padding: '8px 0',
       textRendering: 'optimizeLegibility',
       fontVariantLigatures: 'contextual',
+      maxWidth: '900px',
+      margin: '0 auto',
     },
     '.cm-line': {
       textShadow: '0 0 1px rgba(255, 255, 255, 0.05)',

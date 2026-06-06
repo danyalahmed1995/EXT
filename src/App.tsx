@@ -58,17 +58,14 @@ function App() {
   handleCopyFile,
   handleFileListContextMenu,
   handleWorkspaceContextMenu,
-  getSmartViewCounts,
-  getFilteredFiles,
-  getViewTitle,
+  smartViewCounts,
+  filteredFiles,
+  viewTitle,
   sensors,
   handleDragEnd
 } = useAppLogic();
 
 // ── Render ────────────────────────────────────────
-
-  const filteredFiles = getFilteredFiles();
-  const smartViewCounts = getSmartViewCounts();
 
   return (
     <div 
@@ -104,7 +101,7 @@ function App() {
         }
         fileList={
           <FileList
-            title={getViewTitle()}
+            title={viewTitle}
             files={filteredFiles.map((f) => ({
               id: f.id,
               name: f.name,

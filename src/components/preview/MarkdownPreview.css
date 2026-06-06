@@ -9,6 +9,11 @@
   line-height: var(--line-height-relaxed);
 }
 
+.markdown-preview-inner {
+  max-width: 900px;
+  margin: 0 auto;
+}
+
 /* ── Headings ───────────────────────────────────── */
 
 .markdown-preview h1 {

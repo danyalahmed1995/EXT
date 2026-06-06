@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { ViewMode, EditorTab } from '../components/editor/EditorPanel';
 import { ContextMenuItem } from '../components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
@@ -174,25 +174,12 @@ export function useAppLogic() {
 
   // ── Smart view counts (dynamic) ───────────────────
 
-  const getSmartViewCounts = useCallback(() => {
+  const smartViewCounts = useMemo(() => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     return {
-    setViewMode,
-    setShowSettingsModal,
-    setSearchQuery,
-    setSearchGlobal,
-    setShowNewFileModal,
-    setRenameFileTarget,
-    setRenameWorkspaceTarget,
-    setAppearance,
-    setContextMenu,
-    setActiveView,
-    setSortMode,
-    setActiveFileId,
-    sensors,
-    handleDragEnd,
+
       recent: Math.min(files.length, 5),
       favorites: files.filter((f) => f.isFavorite).length,
       allMarkdown: files.filter((f) => f.extension === '.md' || f.extension === '.markdown').length,
@@ -207,7 +194,7 @@ export function useAppLogic() {
 
   // ── View Filtering ────────────────────────────────
 
-  const getFilteredFiles = useCallback(() => {
+  const filteredFiles = useMemo(() => {
     let result = files;
 
     if (searchQuery.trim()) {
@@ -226,21 +213,26 @@ export function useAppLogic() {
           .sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime())
           .slice(0, 5);
       case 'favorites':
-        return result.filter((f) => f.isFavorite);
+        result = result.filter((f) => f.isFavorite);
+        break;
       case 'allMarkdown':
-        return result.filter((f) => f.extension === '.md' || f.extension === '.markdown');
+        result = result.filter((f) => f.extension === '.md' || f.extension === '.markdown');
+        break;
       case 'allText':
-        return result.filter((f) => f.extension === '.txt');
+        result = result.filter((f) => f.extension === '.txt');
+        break;
       case 'modifiedToday': {
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        return result.filter((f) => new Date(f.modifiedAt) >= today);
+        result = result.filter((f) => new Date(f.modifiedAt) >= today);
+        break;
       }
       case 'todos':
-        return result.filter(
+        result = result.filter(
           (f) =>
             f.hasTodos
         );
+        break;
       default:
         if (activeView.startsWith('ws-')) {
           const wsId = activeView.replace('ws-', '');
@@ -249,7 +241,11 @@ export function useAppLogic() {
         break;
     }
 
-    // Apply Sorting
+    // Apply Sorting (ensure we don't mutate state directly)
+    if (result === files) {
+      result = [...result];
+    }
+    
     if (sortMode === 'custom' && customFileOrder[activeView]) {
       const orderMap = new Map(customFileOrder[activeView].map((id, index) => [id, index]));
       result.sort((a, b) => {
@@ -270,7 +266,7 @@ export function useAppLogic() {
     return result;
   }, [activeView, files, searchQuery, searchGlobal, sortMode, customFileOrder]);
 
-  const getViewTitle = useCallback(() => {
+  const viewTitle = useMemo(() => {
     switch (activeView) {
       case 'recent': return 'Recent';
       case 'favorites': return 'Favorites';
@@ -1147,7 +1143,7 @@ export function useAppLogic() {
 
   const handleFileListDrop = useCallback((draggedId: string, targetId: string) => {
     // Reorder the current filtered view
-    const currentFiles = getFilteredFiles();
+    const currentFiles = filteredFiles;
     const draggedIndex = currentFiles.findIndex(f => f.id === draggedId);
     const targetIndex = currentFiles.findIndex(f => f.id === targetId);
 
@@ -1162,7 +1158,7 @@ export function useAppLogic() {
       [activeView]: newOrder
     }));
     setSortMode('custom');
-  }, [getFilteredFiles, activeView]);
+  }, [filteredFiles, activeView]);
 
   // ── Drag & Drop Handlers ──────────────────────────
 
@@ -1254,13 +1250,13 @@ export function useAppLogic() {
     setRenameFileTarget,
     setRenameWorkspaceTarget,
     setAppearance,
-    previewKey,
     setContextMenu,
     setActiveView,
     setSortMode,
     setActiveFileId,
     sensors,
     handleDragEnd,
+    previewKey,
     activeView,
     viewMode,
     activeFileId,
@@ -1300,9 +1296,9 @@ export function useAppLogic() {
     handleFileListContextMenu,
     handleWorkspaceContextMenu,
     handleFileListDrop,
-    getSmartViewCounts,
-    getFilteredFiles,
-    getViewTitle,
+    smartViewCounts,
+    filteredFiles,
+    viewTitle,
     openRenameFileModal,
     openRenameWorkspaceModal,
     showToast,
