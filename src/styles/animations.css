@@ -1,0 +1,122 @@
+/* ============================================================
+   EXT Design System — Animations & Visual Polish
+   
+   Controlled by data-* attributes on .app-container
+   ============================================================ */
+
+/* ----------------------------------------------------------
+   Global Animation Toggles
+   ---------------------------------------------------------- */
+.app-container[data-animations="false"] *,
+.app-container[data-reduce-motion="true"] * {
+  /* Disable transitions */
+  transition-duration: 0.01ms !important;
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+}
+
+/* ----------------------------------------------------------
+   Sidebar Hover & Active States
+   ---------------------------------------------------------- */
+.app-container[data-sidebar-hover="true"] .sidebar-item,
+.app-container[data-sidebar-hover="true"] .workspace-item {
+  transition: background-color 0.15s ease, transform 0.1s ease, color 0.15s ease;
+}
+
+.app-container[data-sidebar-hover="true"] .sidebar-item:active,
+.app-container[data-sidebar-hover="true"] .workspace-item:active {
+  transform: scale(0.98);
+}
+
+.app-container[data-premium-effects="false"] .sidebar-item.active,
+.app-container[data-premium-effects="false"] .workspace-item.active,
+.app-container[data-premium-effects="false"] .file-list-item.active {
+  box-shadow: none !important;
+}
+
+.app-container[data-premium-effects="true"] .sidebar-item.active,
+.app-container[data-premium-effects="true"] .workspace-item.active {
+  box-shadow: inset 2px 0 0 var(--color-accent), 0 0 12px rgba(var(--color-accent-rgb), 0.15);
+}
+
+/* ----------------------------------------------------------
+   File List Transitions
+   ---------------------------------------------------------- */
+.app-container[data-sidebar-hover="true"] .file-list-item {
+  transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+.app-container[data-sidebar-hover="true"] .file-list-item:active {
+  transform: scale(0.99);
+}
+
+/* ----------------------------------------------------------
+   Tab & View Transitions
+   ---------------------------------------------------------- */
+.app-container[data-smooth-tabs="true"] .editor-tab {
+  transition: background-color 0.2s ease, transform 0.1s ease, border-color 0.2s ease;
+}
+
+.app-container[data-smooth-tabs="true"] .editor-tab:active {
+  transform: scale(0.96);
+}
+
+.app-container[data-smooth-tabs="true"] .editor-content-editor,
+.app-container[data-smooth-tabs="true"] .editor-content-preview {
+  transition: flex 0.25s cubic-bezier(0.2, 0, 0, 1), width 0.25s cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* ----------------------------------------------------------
+   Editor Focus Effects
+   ---------------------------------------------------------- */
+.app-container[data-editor-focus="true"] .editor-content {
+  transition: box-shadow 0.3s ease, border-color 0.3s ease;
+  border: 1px solid transparent;
+}
+
+.app-container[data-editor-focus="true"] .editor-content:focus-within {
+  border-color: rgba(var(--color-accent-rgb), 0.2);
+  box-shadow: inset 0 0 0 1px rgba(var(--color-accent-rgb), 0.1), 0 0 15px rgba(var(--color-accent-rgb), 0.05);
+}
+
+/* ----------------------------------------------------------
+   Preview & Modal Transitions
+   ---------------------------------------------------------- */
+.app-container[data-preview-transitions="true"] .editor-content-preview {
+  animation: fadeSlideIn 0.3s cubic-bezier(0.2, 0, 0, 1);
+}
+
+.app-container[data-animations="true"] .modal-content,
+.app-container[data-animations="true"] .context-menu {
+  animation: popIn 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transform-origin: center;
+}
+
+.app-container[data-animations="true"] .context-menu {
+  transform-origin: top left;
+}
+
+/* ----------------------------------------------------------
+   Keyframes
+   ---------------------------------------------------------- */
+@keyframes popIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes fadeSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

@@ -1,16 +1,26 @@
 import React from 'react';
 import './SettingsModal.css';
+import { AppearanceSettings } from '../../types';
 
 interface SettingsModalProps {
+  appearance: AppearanceSettings;
+  onUpdateAppearance: (settings: AppearanceSettings) => void;
   onClose: () => void;
   onRemoveAllWorkspaces: () => void;
 }
 
-export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRemoveAllWorkspaces }) => {
+export const SettingsModal: React.FC<SettingsModalProps> = ({ appearance, onUpdateAppearance, onClose, onRemoveAllWorkspaces }) => {
   const ignoredDirs = [
     ".git", "node_modules", "dist", "build", "target", ".next", "out", "coverage", "vendor",
     "Library", "Temp", "tmp", ".cache", ".turbo", ".venv", "venv", "bin", "obj"
   ];
+
+  const handleToggle = (key: keyof AppearanceSettings) => {
+    onUpdateAppearance({
+      ...appearance,
+      [key]: !appearance[key]
+    });
+  };
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -21,6 +31,48 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ onClose, onRemoveA
         </div>
         
         <div className="modal-body">
+          <section className="settings-section">
+            <h3>Appearance & Performance</h3>
+            <p className="settings-desc">Customize EXT's visual effects and animations.</p>
+            
+            <div className="settings-toggles">
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.animations} onChange={() => handleToggle('animations')} />
+                <span className="toggle-label">Enable animations</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.premiumEffects} onChange={() => handleToggle('premiumEffects')} />
+                <span className="toggle-label">Enable premium visual effects</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.smoothTabs} onChange={() => handleToggle('smoothTabs')} />
+                <span className="toggle-label">Enable smooth tab transitions</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.sidebarHover} onChange={() => handleToggle('sidebarHover')} />
+                <span className="toggle-label">Enable sidebar hover effects</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.editorFocus} onChange={() => handleToggle('editorFocus')} />
+                <span className="toggle-label">Enable editor focus effects</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.previewTransitions} onChange={() => handleToggle('previewTransitions')} />
+                <span className="toggle-label">Enable preview transition effects</span>
+              </label>
+              
+              <label className="settings-toggle">
+                <input type="checkbox" checked={appearance.reduceMotion} onChange={() => handleToggle('reduceMotion')} />
+                <span className="toggle-label">Reduce motion mode</span>
+              </label>
+            </div>
+          </section>
+
           <section className="settings-section">
             <h3>Ignored Directories</h3>
             <p className="settings-desc">The following directories are skipped during workspace scanning to improve performance:</p>

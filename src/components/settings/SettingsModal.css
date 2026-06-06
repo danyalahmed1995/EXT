@@ -20,6 +20,36 @@
   line-height: 1.5;
 }
 
+.settings-toggles {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--color-surface);
+  padding: 16px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+}
+
+.settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-toggle input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--color-accent);
+  cursor: pointer;
+}
+
+.toggle-label {
+  color: var(--color-text-primary);
+  font-size: var(--font-size-sm);
+}
+
 .ignored-dirs-list {
   display: flex;
   flex-wrap: wrap;

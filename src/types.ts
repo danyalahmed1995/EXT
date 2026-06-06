@@ -21,3 +21,13 @@ export interface FileItem {
 }
 
 export type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'custom';
+
+export interface AppearanceSettings {
+  animations: boolean;
+  premiumEffects: boolean;
+  smoothTabs: boolean;
+  sidebarHover: boolean;
+  editorFocus: boolean;
+  previewTransitions: boolean;
+  reduceMotion: boolean;
+}

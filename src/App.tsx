@@ -7,7 +7,7 @@ import { NewFileModal } from './components/modals/NewFileModal';
 import { RenameModal } from './components/modals/RenameModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu, ContextMenuItem } from './components/context-menu/ContextMenu';
-import { Workspace, FileItem, SortMode } from './types';
+import { Workspace, FileItem, SortMode, AppearanceSettings } from './types';
 import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
@@ -25,6 +25,17 @@ function App() {
   const [isScanning, setIsScanning] = useState(true);
   const [sortMode, setSortMode] = useState<SortMode>('date-desc');
   const [customFileOrder, setCustomFileOrder] = useState<Record<string, string[]>>({});
+  
+  // Settings State
+  const [appearance, setAppearance] = useState<AppearanceSettings>({
+    animations: true,
+    premiumEffects: true,
+    smoothTabs: true,
+    sidebarHover: true,
+    editorFocus: true,
+    previewTransitions: true,
+    reduceMotion: false,
+  });
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('');
@@ -52,9 +63,21 @@ function App() {
         const storedSortMode: SortMode = (localStorage.getItem('ext_sortMode') as SortMode) || 'date-desc';
         const storedCustomOrder: Record<string, string[]> = JSON.parse(localStorage.getItem('ext_customOrder') || '{}');
         
+        const defaultAppearance: AppearanceSettings = {
+          animations: true,
+          premiumEffects: true,
+          smoothTabs: true,
+          sidebarHover: true,
+          editorFocus: true,
+          previewTransitions: true,
+          reduceMotion: window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
+        };
+        const storedAppearance: AppearanceSettings = JSON.parse(localStorage.getItem('ext_appearance') || 'null') || defaultAppearance;
+        
         setWorkspaces(storedWorkspaces);
         setSortMode(storedSortMode);
         setCustomFileOrder(storedCustomOrder);
+        setAppearance(storedAppearance);
         
         let allFiles: FileItem[] = [];
         
@@ -132,6 +155,13 @@ function App() {
       localStorage.setItem('ext_customOrder', JSON.stringify(customFileOrder));
     }
   }, [sortMode, customFileOrder, isScanning]);
+
+  // Sync appearance settings
+  useEffect(() => {
+    if (!isScanning) {
+      localStorage.setItem('ext_appearance', JSON.stringify(appearance));
+    }
+  }, [appearance, isScanning]);
 
   // ── Smart view counts (dynamic) ───────────────────
 
@@ -945,9 +975,19 @@ function App() {
   const smartViewCounts = getSmartViewCounts();
 
   return (
-    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
-      <AppShell
-        sidebar={
+    <div 
+      className="app-container"
+      data-animations={appearance.animations}
+      data-premium-effects={appearance.premiumEffects}
+      data-smooth-tabs={appearance.smoothTabs}
+      data-sidebar-hover={appearance.sidebarHover}
+      data-editor-focus={appearance.editorFocus}
+      data-preview-transitions={appearance.previewTransitions}
+      data-reduce-motion={appearance.reduceMotion}
+    >
+      <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
+        <AppShell
+          sidebar={
           <Sidebar
             workspaces={workspaces}
             smartViewCounts={smartViewCounts}
@@ -1037,24 +1077,28 @@ function App() {
       {/* Settings Modal */}
       {showSettingsModal && (
         <SettingsModal
+          appearance={appearance}
+          onUpdateAppearance={setAppearance}
           onClose={() => setShowSettingsModal(false)}
           onRemoveAllWorkspaces={handleRemoveAllWorkspaces}
         />
       )}
       {contextMenu && (
-        <ContextMenu
-          x={contextMenu.x}
-          y={contextMenu.y}
-          items={contextMenu.items}
-          onClose={() => setContextMenu(null)}
+        <ContextMenu 
+          x={contextMenu.x} 
+          y={contextMenu.y} 
+          items={contextMenu.items} 
+          onClose={() => setContextMenu(null)} 
         />
       )}
+
       {toastMessage && (
         <div className="app-toast">
           {toastMessage}
         </div>
       )}
-    </DndContext>
+      </DndContext>
+    </div>
   );
 }
 
