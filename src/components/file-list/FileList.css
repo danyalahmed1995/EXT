@@ -120,6 +120,36 @@
   color: var(--color-accent);
 }
 
+.ext-checkbox {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-right: -4px;
+}
+
+.ext-checkbox:hover {
+  border-color: var(--color-accent);
+}
+
+.ext-checkbox.checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.ext-checkbox svg {
+  width: 12px;
+  height: 12px;
+}
+
 .file-list-item-content {
   flex: 1;
   min-width: 0;
@@ -178,7 +208,8 @@
   white-space: nowrap;
 }
 
-.file-list-item-favorite {
+.file-list-item-favorite,
+.file-list-item-delete {
   opacity: 0;
   color: var(--color-text-muted);
   cursor: pointer;
@@ -195,13 +226,22 @@
   color: var(--color-warning);
 }
 
-.file-list-item:hover .file-list-item-favorite {
+.file-list-item:hover .file-list-item-favorite,
+.file-list-item:hover .file-list-item-delete {
   opacity: 1;
+}
+
+.file-list-item-favorite:hover,
+.file-list-item-delete:hover {
+  transform: scale(1.15);
 }
 
 .file-list-item-favorite:hover {
   color: var(--color-warning);
-  transform: scale(1.15);
+}
+
+.file-list-item-delete:hover {
+  color: #ff7888;
 }
 
 /* ── Empty State ────────────────────────────────── */

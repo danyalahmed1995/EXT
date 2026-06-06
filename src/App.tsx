@@ -35,6 +35,7 @@ function App() {
   setRenameFileTarget,
   renameWorkspaceTarget,
   setRenameWorkspaceTarget,
+  previewKey,
   contextMenu,
   setContextMenu,
   toastMessage,
@@ -45,6 +46,11 @@ function App() {
   handleAddFolder,
   handleRemoveAllWorkspaces,
   handleCreateFile,
+  selectedFiles,
+  handleToggleFileSelection,
+  handleBulkDeleteFiles,
+  selectedWorkspaces,
+  handleToggleWorkspaceSelection,
   handleRenameFile,
   handleRenameWorkspace,
   handleSaveFile,
@@ -92,6 +98,8 @@ function App() {
             onWorkspaceContextMenu={handleWorkspaceContextMenu}
             activeFileContent={openTabs.find(t => t.id === activeFileId)?.content}
             activeFileExtension={openTabs.find(t => t.id === activeFileId)?.extension}
+            selectedWorkspaces={selectedWorkspaces}
+            onToggleWorkspaceSelection={handleToggleWorkspaceSelection}
           />
         }
         fileList={
@@ -115,6 +123,9 @@ function App() {
             onDeleteFile={handleDeleteFile}
             onCopyFile={handleCopyFile}
             onContextMenu={handleFileListContextMenu}
+            selectedFiles={selectedFiles}
+            onToggleSelection={handleToggleFileSelection}
+            onBulkDeleteFiles={handleBulkDeleteFiles}
           />
         }
         editor={
@@ -129,6 +140,7 @@ function App() {
             onSaveFile={handleSaveFile}
             onNewFile={() => setShowNewFileModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
+            previewKey={previewKey}
           />
         }
       />

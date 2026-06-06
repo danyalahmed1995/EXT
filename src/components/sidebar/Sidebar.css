@@ -1,6 +1,5 @@
 .sidebar {
-  width: var(--sidebar-width);
-  min-width: var(--sidebar-width);
+  width: 100%;
   height: 100%;
   background: var(--color-sidebar);
   backdrop-filter: var(--glass-blur);
@@ -33,8 +32,10 @@
   letter-spacing: 1.5px;
 }
 
-.sidebar-brand-icon {
-  color: var(--color-accent);
+.sidebar-brand-icon-img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
 }
 
 /* ── Search ─────────────────────────────────────── */
@@ -207,6 +208,36 @@
 }
 
 /* ── Workspace Item ─────────────────────────────── */
+
+.ext-checkbox {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--color-border-strong);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  background: var(--color-surface);
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+.ext-checkbox:hover {
+  border-color: var(--color-accent);
+}
+
+.ext-checkbox.checked {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: #fff;
+}
+
+.ext-checkbox svg {
+  width: 10px;
+  height: 10px;
+}
 
 .workspace-item {
   display: flex;

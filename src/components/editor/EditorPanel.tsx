@@ -44,6 +44,7 @@ interface EditorPanelProps {
   onSaveFile: (tabId: string) => void;
   onNewFile: () => void;
   onOpenSettings: () => void;
+  previewKey?: number;
 }
 
 // ── Tab Icon Helper ─────────────────────────────────
@@ -83,8 +84,17 @@ const SortableTab: React.FC<SortableTabProps> = ({ tab, isActive, onSelect, onCl
       style={style}
       {...attributes}
       {...listeners}
+      id={`editor-tab-${tab.id}`}
       className={`editor-tab ${isActive ? 'active' : ''}`}
       onClick={() => onSelect(tab.id)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        const event = new CustomEvent('tab-bar-context-menu', {
+          detail: { x: e.clientX, y: e.clientY, clickedTabId: tab.id, activeTabId: tab.id }
+        });
+        window.dispatchEvent(event);
+      }}
     >
       <span className="editor-tab-icon">{getTabIcon(tab.extension)}</span>
       <span className="editor-tab-name">{tab.name}</span>
@@ -121,8 +131,18 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onSaveFile,
   onNewFile,
   onOpenSettings,
+  previewKey,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
+
+  React.useEffect(() => {
+    if (activeTabId) {
+      const el = document.getElementById(`editor-tab-${activeTabId}`);
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+      }
+    }
+  }, [activeTabId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if ((e.ctrlKey || e.metaKey) && e.key === 's') {
@@ -136,6 +156,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     // Dispatch a custom event to App.tsx to show the save context menu
     const event = new CustomEvent('editor-context-menu', {
       detail: { x: e.clientX, y: e.clientY, tabId: activeTabId }
+    });
+    window.dispatchEvent(event);
+  };
+
+  const handleTabBarContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const event = new CustomEvent('tab-bar-context-menu', {
+      detail: { x: e.clientX, y: e.clientY, clickedTabId: undefined, activeTabId }
     });
     window.dispatchEvent(event);
   };
@@ -190,7 +218,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   return (
     <div className="editor-panel" onKeyDown={handleKeyDown} tabIndex={-1}>
       {/* Tab Bar with integrated view switcher */}
-      <div className="editor-tab-bar">
+      <div className="editor-tab-bar" onContextMenu={handleTabBarContextMenu}>
         <div 
           className="editor-tabs"
           onWheel={(e) => {
@@ -256,7 +284,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       </div>
 
       {/* Content Area */}
-      <div className="editor-content" onContextMenu={handleContextMenu}>
+      <div className="editor-content" onContextMenuCapture={handleContextMenu}>
         {(viewMode === 'editor' || viewMode === 'split') && (
           <div className={`editor-content-editor ${viewMode === 'editor' ? 'full' : ''}`}>
             <CodeMirrorEditor
@@ -270,7 +298,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
         {(viewMode === 'preview' || viewMode === 'split') && isMarkdown && (
           <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
-            <MarkdownPreview content={activeTab.content} absolutePath={activeTab.absolutePath} />
+            <MarkdownPreview key={previewKey} content={activeTab.content} absolutePath={activeTab.absolutePath} />
           </div>
         )}
 

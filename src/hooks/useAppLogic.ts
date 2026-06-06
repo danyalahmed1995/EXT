@@ -20,6 +20,8 @@ export function useAppLogic() {
   const [isScanning, setIsScanning] = useState(true);
   const [sortMode, setSortMode] = useState<SortMode>('date-desc');
   const [customFileOrder, setCustomFileOrder] = useState<Record<string, string[]>>({});
+  const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
+  const [selectedWorkspaces, setSelectedWorkspaces] = useState<Set<string>>(new Set());
   
   // Settings State
   const [appearance, setAppearance] = useState<AppearanceSettings>({
@@ -41,6 +43,7 @@ export function useAppLogic() {
   const [renameWorkspaceTarget, setRenameWorkspaceTarget] = useState<{ id: string, name: string, path: string } | null>(null);
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [previewKey, setPreviewKey] = useState(0);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -285,6 +288,32 @@ export function useAppLogic() {
     }
   }, [activeView, workspaces]);
 
+  // Clear selections when view changes
+  useEffect(() => {
+    setSelectedFiles(new Set());
+    setContextMenu(null);
+  }, [activeView, searchQuery, sortMode]);
+
+  // ── Selection Handlers ────────────────────────────
+
+  const handleToggleFileSelection = useCallback((fileId: string) => {
+    setSelectedFiles((prev) => {
+      const next = new Set(prev);
+      if (next.has(fileId)) next.delete(fileId);
+      else next.add(fileId);
+      return next;
+    });
+  }, []);
+
+  const handleToggleWorkspaceSelection = useCallback((workspaceId: string) => {
+    setSelectedWorkspaces((prev) => {
+      const next = new Set(prev);
+      if (next.has(workspaceId)) next.delete(workspaceId);
+      else next.add(workspaceId);
+      return next;
+    });
+  }, []);
+
   // ── File Handlers ─────────────────────────────────
 
   const handleFileSelect = useCallback(
@@ -342,6 +371,47 @@ export function useAppLogic() {
     },
     [activeFileId, openTabs]
   );
+
+  const handleReloadTab = useCallback(async (tabId: string) => {
+    const tab = openTabs.find(t => t.id === tabId);
+    if (tab?.isDirty) {
+      const confirmed = await ask('This file has unsaved changes. Reloading will discard them. Continue?', {
+        title: 'Unsaved Changes',
+        kind: 'warning',
+        okLabel: 'Reload Anyway',
+        cancelLabel: 'Cancel',
+      });
+      if (!confirmed) return;
+    }
+
+    const file = files.find(f => f.id === tabId);
+    const workspace = workspaces.find(w => w.id === file?.workspaceId);
+    if (file && workspace) {
+      try {
+        const content = await invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath });
+        setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, isDirty: false } : t));
+        showToast('File reloaded');
+      } catch (e) {
+        showToast('Failed to reload file');
+      }
+    }
+  }, [openTabs, files, workspaces]);
+
+  const handleClearOtherTabs = useCallback(async (tabId: string) => {
+    const hasDirtyOthers = openTabs.some(t => t.id !== tabId && t.isDirty);
+    if (hasDirtyOthers) {
+      const confirmed = await ask('Other tabs have unsaved changes. Closing them will discard changes. Continue?', {
+        title: 'Unsaved Changes',
+        kind: 'warning',
+        okLabel: 'Close Anyway',
+        cancelLabel: 'Cancel',
+      });
+      if (!confirmed) return;
+    }
+
+    setOpenTabs(tabs => tabs.filter(t => t.id === tabId));
+    setActiveFileId(tabId);
+  }, [openTabs]);
 
   const handleContentChange = useCallback((tabId: string, content: string) => {
     setOpenTabs((tabs) =>
@@ -489,6 +559,41 @@ export function useAppLogic() {
       setActiveView('allMarkdown');
     }
   }, [files, activeView, activeFileId]);
+
+  // ── Bulk Remove Workspaces Handler ───────────────────
+
+  const handleBulkRemoveWorkspaces = useCallback(async () => {
+    if (selectedWorkspaces.size === 0) return;
+
+    const confirmed = await ask(`Are you sure you want to remove ${selectedWorkspaces.size} workspaces? Your files will remain safe on disk.`, {
+      title: 'Confirm Bulk Removal',
+      kind: 'warning',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      setWorkspaces((prev) => prev.filter((w) => !selectedWorkspaces.has(w.id)));
+      setFiles((prev) => prev.filter((f) => !selectedWorkspaces.has(f.workspaceId)));
+      
+      const activeFile = files.find(f => f.id === activeFileId);
+      if (activeFile && selectedWorkspaces.has(activeFile.workspaceId)) {
+        setActiveFileId(null);
+        setOpenTabs([]);
+      }
+      
+      if (activeView.startsWith('ws-')) {
+        const wsId = activeView.replace('ws-', '');
+        if (selectedWorkspaces.has(wsId)) {
+          setActiveView('allMarkdown');
+        }
+      }
+      setSelectedWorkspaces(new Set());
+      showToast(`Removed ${selectedWorkspaces.size} workspaces`);
+    } catch (err) {
+      console.error('Failed to remove workspaces:', err);
+    }
+  }, [selectedWorkspaces, workspaces, files, activeFileId, activeView]);
 
   const handleRemoveAllWorkspaces = useCallback(() => {
     setWorkspaces([]);
@@ -744,6 +849,45 @@ export function useAppLogic() {
     }
   }, [files, workspaces, activeFileId]);
 
+  // ── Bulk Delete Files Handler ───────────────────────
+
+  const handleBulkDeleteFiles = useCallback(async () => {
+    if (selectedFiles.size === 0) return;
+
+    const confirmed = await ask(`Are you sure you want to delete ${selectedFiles.size} files? This action cannot be undone.`, {
+      title: 'Confirm Bulk Deletion',
+      kind: 'warning',
+    });
+
+    if (!confirmed) return;
+
+    try {
+      for (const fileId of selectedFiles) {
+        const file = files.find(f => f.id === fileId);
+        const workspace = workspaces.find(w => w.id === file?.workspaceId);
+        
+        if (file && workspace) {
+          await invoke('delete_file', {
+            workspacePath: workspace.path,
+            relativePath: file.relativePath,
+          });
+        }
+      }
+
+      setFiles((prev) => prev.filter((f) => !selectedFiles.has(f.id)));
+      setOpenTabs((prev) => prev.filter((t) => !selectedFiles.has(t.id)));
+      
+      if (activeFileId && selectedFiles.has(activeFileId)) {
+        setActiveFileId(null);
+      }
+      setSelectedFiles(new Set());
+      showToast(`Deleted ${selectedFiles.size} files`);
+    } catch (err) {
+      console.error('Failed to bulk delete files:', err);
+      alert(`Failed to delete some files: ${err}`);
+    }
+  }, [selectedFiles, files, workspaces, activeFileId]);
+
   // ── Copy File Handler ───────────────────────────────
 
   const handleCopyFile = useCallback(async (fileId: string) => {
@@ -778,13 +922,71 @@ export function useAppLogic() {
             shortcut: 'Ctrl+S',
             onClick: () => handleSaveFile(tabId),
           },
+          {
+            label: 'Copy',
+            shortcut: 'Ctrl+C',
+            onClick: () => window.dispatchEvent(new Event('editor-copy')),
+          },
+          {
+            label: 'Reload',
+            shortcut: '',
+            onClick: () => handleReloadTab(tabId),
+          },
+          {
+            label: 'Refresh',
+            shortcut: '',
+            onClick: () => setPreviewKey(k => k + 1),
+          },
+          {
+            label: 'Clear tabs',
+            shortcut: '',
+            onClick: () => handleClearOtherTabs(tabId),
+          },
+          {
+            label: 'Delete',
+            shortcut: 'Del',
+            onClick: () => window.dispatchEvent(new Event('editor-delete')),
+          },
         ],
       });
     };
 
     window.addEventListener('editor-context-menu', handleEditorContextMenu);
     return () => window.removeEventListener('editor-context-menu', handleEditorContextMenu);
-  }, [handleSaveFile]);
+  }, [handleSaveFile, handleReloadTab, handleClearOtherTabs]);
+
+  useEffect(() => {
+    const handleTabBarContextMenu = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const { x, y, clickedTabId, activeTabId } = customEvent.detail;
+      const targetTabId = clickedTabId || activeTabId;
+      if (!targetTabId) return;
+
+      setContextMenu({
+        x,
+        y,
+        items: [
+          {
+            label: 'Reload',
+            shortcut: '',
+            onClick: () => handleReloadTab(targetTabId),
+          },
+          {
+            label: 'Refresh',
+            shortcut: '',
+            onClick: () => setPreviewKey(k => k + 1),
+          },
+          {
+            label: 'Clear tabs',
+            shortcut: '',
+            onClick: () => handleClearOtherTabs(targetTabId),
+          },
+        ],
+      });
+    };
+    window.addEventListener('tab-bar-context-menu', handleTabBarContextMenu);
+    return () => window.removeEventListener('tab-bar-context-menu', handleTabBarContextMenu);
+  }, [handleReloadTab, handleClearOtherTabs]);
 
   // ── Keyboard Shortcuts ─────────────────────────────────
 
@@ -813,6 +1015,22 @@ export function useAppLogic() {
           openRenameFileModal(activeFileId);
         } else if (activeView.startsWith('ws-')) {
           openRenameWorkspaceModal(activeView.replace('ws-', ''));
+        }
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+        // Do not intercept if user is typing
+        if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || (e.target as HTMLElement).closest('.cm-editor') || (e.target as HTMLElement).closest('[contenteditable="true"]')) {
+          return;
+        }
+        
+        if (openTabs.length > 0 && activeFileId) {
+          const idx = openTabs.findIndex(t => t.id === activeFileId);
+          if (e.key === 'ArrowLeft' && idx > 0) {
+            e.preventDefault();
+            setActiveFileId(openTabs[idx - 1].id);
+          } else if (e.key === 'ArrowRight' && idx < openTabs.length - 1) {
+            e.preventDefault();
+            setActiveFileId(openTabs[idx + 1].id);
+          }
         }
       }
     };
@@ -920,10 +1138,12 @@ export function useAppLogic() {
         { label: 'New Folder', onClick: () => handleCreateFolder(workspaceId), shortcut: 'Ctrl+Shift+N' },
         { label: 'Rename Workspace', onClick: () => openRenameWorkspaceModal(workspaceId) },
         { divider: true, onClick: () => {} },
-        { label: 'Remove Workspace', onClick: () => handleRemoveWorkspace(workspaceId) },
+        ...(selectedWorkspaces.has(workspaceId) && selectedWorkspaces.size > 1
+          ? [{ label: `Remove Selected Workspaces (${selectedWorkspaces.size})`, onClick: handleBulkRemoveWorkspaces }]
+          : [{ label: 'Remove Workspace', onClick: () => handleRemoveWorkspace(workspaceId) }]),
       ]
     });
-  }, [workspaces, handleCreateFolder, handleRemoveWorkspace, openRenameWorkspaceModal]);
+  }, [workspaces, handleCreateFolder, handleRemoveWorkspace, handleBulkRemoveWorkspaces, openRenameWorkspaceModal, selectedWorkspaces]);
 
   const handleFileListDrop = useCallback((draggedId: string, targetId: string) => {
     // Reorder the current filtered view
@@ -1034,6 +1254,7 @@ export function useAppLogic() {
     setRenameFileTarget,
     setRenameWorkspaceTarget,
     setAppearance,
+    previewKey,
     setContextMenu,
     setActiveView,
     setSortMode,
@@ -1084,6 +1305,12 @@ export function useAppLogic() {
     getViewTitle,
     openRenameFileModal,
     openRenameWorkspaceModal,
-    showToast
+    showToast,
+    selectedFiles,
+    handleToggleFileSelection,
+    handleBulkDeleteFiles,
+    selectedWorkspaces,
+    handleToggleWorkspaceSelection,
+    handleBulkRemoveWorkspaces,
   };
 }

@@ -36,6 +36,9 @@ interface FileListProps {
   onDeleteFile: (fileId: string) => void;
   onCopyFile: (fileId: string) => void;
   onContextMenu?: (e: React.MouseEvent, fileId?: string) => void;
+  selectedFiles: Set<string>;
+  onToggleSelection: (fileId: string) => void;
+  onBulkDeleteFiles: () => void;
 }
 
 // ── Date Formatting ─────────────────────────────────
@@ -81,6 +84,8 @@ interface FileListItemProps {
   onToggleFavorite: () => void;
   onDelete: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  isSelected: boolean;
+  onToggleSelection: () => void;
 }
 
 const FileListItem: React.FC<FileListItemProps> = ({
@@ -95,6 +100,8 @@ const FileListItem: React.FC<FileListItemProps> = ({
   onToggleFavorite,
   onDelete,
   onContextMenu,
+  isSelected,
+  onToggleSelection,
 }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: `file-${id}`,
@@ -156,18 +163,30 @@ const FileListItem: React.FC<FileListItemProps> = ({
         >
           {isFavorite ? <StarFilledIcon size={14} /> : <StarIcon size={14} />}
         </button>
-        <button
-          className="file-list-item-delete"
-          style={{ color: '#f5546a', marginLeft: '4px' }}
-          onPointerDown={(e) => e.stopPropagation()}
-          onClick={(e) => {
-            e.stopPropagation();
-            onDelete();
-          }}
-          title="Delete file"
-        >
-          <TrashIcon size={14} />
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div 
+            className={`ext-checkbox ${isSelected ? 'checked' : ''}`}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => { e.stopPropagation(); onToggleSelection(); }}
+          >
+            {isSelected && (
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            )}
+          </div>
+          <button
+            className="file-list-item-delete"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+            title="Delete file"
+          >
+            <TrashIcon size={14} />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -186,6 +205,9 @@ export const FileList: React.FC<FileListProps> = ({
   onDeleteFile,
   onCopyFile,
   onContextMenu,
+  selectedFiles,
+  onToggleSelection,
+  onBulkDeleteFiles,
 }) => {
   const [showSortMenu, setShowSortMenu] = useState(false);
 
@@ -198,6 +220,15 @@ export const FileList: React.FC<FileListProps> = ({
   }[sortMode];
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Delete') {
+      if (selectedFiles.size > 0) {
+        onBulkDeleteFiles();
+      } else if (activeFileId) {
+        onDeleteFile(activeFileId);
+      }
+      return;
+    }
+
     if ((e.ctrlKey || e.metaKey) && e.key === 'c' && activeFileId) {
       onCopyFile(activeFileId);
       return;
@@ -262,6 +293,8 @@ export const FileList: React.FC<FileListProps> = ({
                 onToggleFavorite={() => onToggleFavorite(file.id)}
                 onDelete={() => onDeleteFile(file.id)}
                 onContextMenu={(e) => onContextMenu?.(e, file.id)}
+                isSelected={selectedFiles.has(file.id)}
+                onToggleSelection={() => onToggleSelection(file.id)}
               />
             ))}
           </SortableContext>

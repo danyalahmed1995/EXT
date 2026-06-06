@@ -93,8 +93,38 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       view.destroy();
     };
-    // Only re-create on mount/unmount
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handleCopy = () => {
+      if (viewRef.current) {
+        const selection = viewRef.current.state.sliceDoc(
+          viewRef.current.state.selection.main.from,
+          viewRef.current.state.selection.main.to
+        );
+        if (selection) {
+          navigator.clipboard.writeText(selection);
+        }
+      }
+    };
+    const handleDelete = () => {
+      if (viewRef.current) {
+        viewRef.current.dispatch({
+          changes: {
+            from: viewRef.current.state.selection.main.from,
+            to: viewRef.current.state.selection.main.to,
+            insert: ''
+          }
+        });
+      }
+    };
+    window.addEventListener('editor-copy', handleCopy);
+    window.addEventListener('editor-delete', handleDelete);
+    return () => {
+      window.removeEventListener('editor-copy', handleCopy);
+      window.removeEventListener('editor-delete', handleDelete);
+    };
   }, []);
 
   // The CodeMirrorEditor is completely unmounted/remounted when switching tabs

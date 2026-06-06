@@ -9,7 +9,6 @@ import {
   CalendarIcon,
   ChecklistIcon,
   PlusIcon,
-  SparkleIcon,
   SettingsIcon,
   ChevronRightIcon,
   TypeScriptIcon,
@@ -48,6 +47,8 @@ interface SidebarProps {
   onWorkspaceContextMenu?: (e: React.MouseEvent, workspaceId: string) => void;
   activeFileContent?: string;
   activeFileExtension?: string;
+  selectedWorkspaces: Set<string>;
+  onToggleWorkspaceSelection: (workspaceId: string) => void;
 }
 
 // ── Helper: Get workspace icon ──────────────────────
@@ -136,6 +137,8 @@ interface WorkspaceItemProps {
   isActive: boolean;
   onClick: () => void;
   onContextMenu?: (e: React.MouseEvent) => void;
+  isSelected: boolean;
+  onToggleSelection: () => void;
 }
 
 const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
@@ -145,6 +148,8 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
   isActive,
   onClick,
   onContextMenu,
+  isSelected,
+  onToggleSelection,
 }) => {
   const { isOver, setNodeRef } = useDroppable({
     id: `workspace-${id}`,
@@ -158,6 +163,17 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       onClick={onClick}
       onContextMenu={onContextMenu}
     >
+      <div 
+        className={`ext-checkbox ${isSelected ? 'checked' : ''}`}
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => { e.stopPropagation(); onToggleSelection(); }}
+      >
+        {isSelected && (
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        )}
+      </div>
       <span className="workspace-item-icon">
         {getWorkspaceIcon(detectedIcon)}
       </span>
@@ -182,6 +198,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onWorkspaceContextMenu,
   activeFileContent,
   activeFileExtension,
+  selectedWorkspaces,
+  onToggleWorkspaceSelection,
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchGlobal, setSearchGlobal] = useState(false);
@@ -201,9 +219,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <div className="sidebar">
       {/* Brand */}
       <div className="sidebar-brand">
-        <span className="sidebar-brand-icon">
-          <SparkleIcon size={18} />
-        </span>
+        <img src="/icon.png" alt="EXT Logo" className="sidebar-brand-icon-img" />
         <span className="sidebar-brand-name">EXT</span>
       </div>
 
@@ -294,6 +310,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               isActive={activeView === `ws-${ws.id}`}
               onClick={() => onViewChange(`ws-${ws.id}`)}
               onContextMenu={(e) => onWorkspaceContextMenu?.(e, ws.id)}
+              isSelected={selectedWorkspaces.has(ws.id)}
+              onToggleSelection={() => onToggleWorkspaceSelection(ws.id)}
             />
           ))}
         </SidebarSection>

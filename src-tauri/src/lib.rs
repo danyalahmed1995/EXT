@@ -23,6 +23,12 @@ fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBu
     Ok(joined)
 }
 
+#[tauri::command]
+fn open_devtools(window: tauri::WebviewWindow) {
+    #[cfg(debug_assertions)]
+    window.open_devtools();
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ScanResult {
@@ -529,7 +535,7 @@ pub fn run() {
             scan_directory, create_workspace, create_file, create_folder, rename_file, 
             save_file, move_file, delete_file, reveal_in_explorer, read_file, 
             copy_file_to_clipboard, get_file_modified_time, get_absolute_path, 
-            rename_workspace_folder, force_exit, force_restart
+            rename_workspace_folder, force_exit, force_restart, open_devtools
         ])
         .setup(|app| {
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
