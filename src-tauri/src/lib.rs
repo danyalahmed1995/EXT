@@ -597,3 +597,34 @@ pub fn run() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
+pub fn normalize_line_endings(content: &str) -> String {
+    // Converts all CRLF to LF, then converts all LF to CRLF
+    // This standardizes line endings for cross-platform files
+    let lf_only = content.replace("\r\n", "\n");
+    lf_only.replace("\n", "\r\n")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_resolve_safe_path() {
+        let safe = resolve_safe_path("/var/workspace", "folder/file.md");
+        assert!(safe.is_ok());
+
+        let unsafe_path = resolve_safe_path("/var/workspace", "../../../etc/passwd");
+        assert!(unsafe_path.is_err());
+    }
+
+    #[test]
+    fn test_lf_to_crlf_normalization() {
+        // Mixed LF and CRLF
+        let mixed_content = "Line 1\nLine 2\r\nLine 3\n";
+        let normalized = normalize_line_endings(mixed_content);
+        
+        // It should convert all to CRLF
+        assert_eq!(normalized, "Line 1\r\nLine 2\r\nLine 3\r\n");
+    }
+}

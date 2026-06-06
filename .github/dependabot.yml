@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Enable npm updates
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    
+  # Enable cargo updates
+  - package-ecosystem: "cargo"
+    directory: "/src-tauri"
+    schedule:
+      interval: "weekly"
