@@ -1,29 +1,26 @@
-# EXT
-A local-first workspace for Markdown and text files.
+# EXT: The Markdown Workspace
 
-## What is EXT?
-EXT is not a generic Markdown editor. It is a dedicated desktop application that helps you organize, search, open, edit, and preview Markdown and text files scattered across multiple local folders. Your files stay exactly where they are on your hard drive, keeping you fully in control of your data without requiring cloud syncing or a centralized proprietary database.
+EXT is a dedicated workspace designed to help you access, organize, and manage all the Markdown and text files scattered across your computer. 
 
-## Features (MVP)
-- **Local-First Filesystem:** Instantly read, write, and delete real files without importing them.
-- **Auto-Scanning:** Recursively scans added folders for `.md` and `.txt` files while automatically ignoring noisy build directories (like `node_modules` or `.git`).
-- **Dynamic Organization:** View your scattered files grouped by folder context, favorites, recent modifications, or file type.
-- **Global Search:** Find files instantly across all your connected workspaces.
-- **Polished Editor & Preview:** A premium split-view environment with syntax highlighting, GitHub-flavored markdown preview, and a beautiful frosted glass UI.
-- **Persistence:** Remembers your connected workspaces and favorites between sessions securely.
+It is important to clarify what EXT is not: **EXT does not compete with or try to replace your primary Markdown editor.** There are many excellent text editors available. Instead, EXT acts as a central command center for your notes. If you have Markdown files in a dozen different project folders, EXT provides a single workspace to view, search, and edit them simultaneously without having to move them or import them into a proprietary database.
 
-## Tech Stack
-- **Frontend:** React, TypeScript, Vite
-- **Editor:** CodeMirror 6, Markdown-it
-- **Backend:** Rust, Tauri
-- **Styling:** Vanilla CSS Custom Properties (Glassmorphism design system)
+Your files stay exactly where they are on your hard drive. 
 
-## Setup & Run Instructions
+## Core Capabilities
+
+- **Local-First Filesystem Management**: Connect any folder on your computer to your workspace. EXT reads and writes directly to your local files. There are no proprietary formats, no hidden databases, and no cloud syncing requirements.
+- **Smart Views**: Automatically aggregates files across all your connected folders. You can view all Markdown files at once, filter by files modified today, or isolate files containing "TODO" items.
+- **Global Search**: Instantly search for file names across every connected directory.
+- **Tabbed Environment**: Open multiple files at once and navigate between them using a built-in tab system, complete with keyboard shortcuts for fast switching.
+- **Split-View Experience**: A clean side-by-side view featuring a standard text editor and a rendered GitHub-Flavored Markdown preview. 
+- **Native Performance**: Built using Rust and Tauri to ensure the application remains lightweight, fast, and light on system resources.
+
+## Setup Instructions
 
 ### Prerequisites
-1. [Node.js](https://nodejs.org) (v16+)
-2. [Rust](https://www.rust-lang.org/tools/install)
-3. Tauri CLI and OS specific prerequisites as defined in [Tauri Docs](https://tauri.app/v1/guides/getting-started/prerequisites)
+1. Node.js (v16 or higher)
+2. Rust (latest stable version)
+3. Tauri OS prerequisites (e.g., build-essential, libwebkit2gtk-4.1-dev on Linux, or MSVC on Windows)
 
 ### Development
 1. Clone the repository and navigate to the root directory.
@@ -31,24 +28,20 @@ EXT is not a generic Markdown editor. It is a dedicated desktop application that
    ```bash
    npm install
    ```
-3. Run the Tauri dev server:
+3. Run the development server:
    ```bash
-   npm run tauri dev
+   npm run dev
    ```
-This will automatically launch Vite and compile the Rust backend, opening the native desktop window.
 
-### Build
-To build a production executable:
+### Building for Production
+To build a standalone executable for your operating system:
 ```bash
-npm run tauri build
+npm run build
 ```
-The resulting executable will be available in `src-tauri/target/release`.
+The resulting application file will be generated in `src-tauri/target/release`.
 
 ## License
 MIT License.
 
 ## Contributing
-Contributions are welcome.
-
-### Contributing Themes
-EXT supports a robust CSS variables-driven theme system. Visual contributors can easily add new built-in themes by defining a new set of token values. Please refer to the [Themes Documentation](docs/themes.md) for detailed instructions on adding or modifying themes without breaking application logic.
+Please see `CONTRIBUTING.md` for the strict rules regarding code contributions and issue reporting, and `DESIGN.md` for a technical overview of how the application is built.

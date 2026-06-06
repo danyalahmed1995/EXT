@@ -526,6 +526,54 @@ fn force_restart(app_handle: tauri::AppHandle) {
     app_handle.restart();
 }
 
+
+#[tauri::command]
+fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, String> {
+    let resource_dir = app_handle.path().resource_dir().unwrap_or_default();
+    
+    // Start by checking standard dev paths in debug mode to avoid empty placeholder dirs
+    let mut source_dir = resource_dir.join("Examples");
+    
+    #[cfg(debug_assertions)]
+    {
+        if let Ok(cwd) = std::env::current_dir() {
+            let dev_path1 = cwd.join("../Examples");
+            let dev_path2 = cwd.join("Examples");
+            if dev_path1.exists() && dev_path1.join("Welcome.md").exists() {
+                source_dir = dev_path1;
+            } else if dev_path2.exists() && dev_path2.join("Welcome.md").exists() {
+                source_dir = dev_path2;
+            }
+        }
+    }
+
+    // If not found in dev paths, try the resource bundles
+    if !source_dir.join("Welcome.md").exists() {
+        let res_path1 = resource_dir.join("Examples");
+        let res_path2 = resource_dir.join("_up_").join("Examples");
+        if res_path1.exists() && res_path1.join("Welcome.md").exists() {
+            source_dir = res_path1;
+        } else if res_path2.exists() && res_path2.join("Welcome.md").exists() {
+            source_dir = res_path2;
+        }
+    }
+    
+    if source_dir.exists() && source_dir.join("Welcome.md").exists() {
+        // Canonicalize to resolve any '..' in the path, which would trigger the anti-traversal security checks
+        let resolved_path = std::fs::canonicalize(&source_dir).unwrap_or(source_dir);
+        // Windows canonicalize adds \\?\, so we strip it for cleaner paths if possible
+        let path_str = resolved_path.to_string_lossy().to_string();
+        let clean_path = if path_str.starts_with(r"\\?\") {
+            path_str[4..].to_string()
+        } else {
+            path_str
+        };
+        Ok(clean_path)
+    } else {
+        Err(format!("Could not find Examples directory. Searched from {:?}", resource_dir))
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -535,7 +583,8 @@ pub fn run() {
             scan_directory, create_workspace, create_file, create_folder, rename_file, 
             save_file, move_file, delete_file, reveal_in_explorer, read_file, 
             copy_file_to_clipboard, get_file_modified_time, get_absolute_path, 
-            rename_workspace_folder, force_exit, force_restart, open_devtools
+            rename_workspace_folder, force_exit, force_restart, open_devtools,
+            initialize_example_workspace
         ])
         .setup(|app| {
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;

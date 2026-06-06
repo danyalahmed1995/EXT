@@ -56,7 +56,28 @@ export function useAppLogic() {
     async function loadData() {
       setIsScanning(true);
       try {
-        const storedWorkspaces: Workspace[] = JSON.parse(localStorage.getItem('ext_workspaces') || '[]');
+        let storedWorkspaces: Workspace[] = JSON.parse(localStorage.getItem('ext_workspaces') || '[]');
+        
+        let examplesPath = '';
+        try {
+          // Resolve the internal bundled Examples directory
+          examplesPath = await invoke<string>('initialize_example_workspace');
+        } catch (err) {
+          console.error('Failed to resolve example workspace:', err);
+        }
+        
+        // First-time launch: inject the examples workspace into the UI
+        if (storedWorkspaces.length === 0 && examplesPath) {
+          const newWorkspace: Workspace = {
+            id: `ws-${Date.now()}`,
+            name: 'Examples',
+            path: examplesPath,
+            detectedIcon: 'markdown'
+          };
+          storedWorkspaces.push(newWorkspace);
+          localStorage.setItem('ext_workspaces', JSON.stringify(storedWorkspaces));
+        }
+        
         const storedFavorites: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
         const storedSortMode: SortMode = (localStorage.getItem('ext_sortMode') as SortMode) || 'date-desc';
         const storedCustomOrder: Record<string, string[]> = JSON.parse(localStorage.getItem('ext_customOrder') || '{}');

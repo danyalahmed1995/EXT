@@ -1,4 +1,5 @@
-import React, { createContext, useContext, useEffect, useState, useMemo } from 'react';
+import React, { createContext, useContext, useLayoutEffect, useState, useMemo } from 'react';
+import { flushSync } from 'react-dom';
 import { Theme, CustomTheme } from './themeTypes';
 import { BUILT_IN_THEMES, extDarkTheme } from './themes';
 
@@ -46,8 +47,8 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return extDarkTheme; // Fallback
   }, [currentThemeId, customThemes]);
 
-  // Apply CSS Variables to :root
-  useEffect(() => {
+  // Apply CSS Variables to :root synchronously
+  useLayoutEffect(() => {
     const root = document.documentElement;
     const tokens = currentTheme.tokens;
     
@@ -63,36 +64,58 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Clean up function if needed (not strictly necessary for :root unless unmounting the whole app)
   }, [currentTheme]);
 
+  const transitionTheme = (updateFn: () => void) => {
+    // @ts-ignore - View Transitions API
+    if (document.startViewTransition) {
+      // @ts-ignore
+      document.startViewTransition(() => {
+        flushSync(() => {
+          updateFn();
+        });
+      });
+    } else {
+      updateFn();
+    }
+  };
+
   const setTheme = (id: string) => {
-    setCurrentThemeId(id);
+    transitionTheme(() => {
+      setCurrentThemeId(id);
+    });
     localStorage.setItem(THEME_STORAGE_KEY, id);
   };
 
   const saveCustomTheme = (theme: CustomTheme) => {
-    setCustomThemes(prev => {
-      const existingIdx = prev.findIndex(t => t.id === theme.id);
-      let next;
-      if (existingIdx >= 0) {
-        next = [...prev];
-        next[existingIdx] = theme;
-      } else {
-        next = [...prev, theme];
-      }
-      localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(next));
-      return next;
+    transitionTheme(() => {
+      setCustomThemes(prev => {
+        const existingIdx = prev.findIndex(t => t.id === theme.id);
+        let next;
+        if (existingIdx >= 0) {
+          next = [...prev];
+          next[existingIdx] = theme;
+        } else {
+          next = [...prev, theme];
+        }
+        localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(next));
+        return next;
+      });
+      setCurrentThemeId(theme.id);
     });
-    setTheme(theme.id);
+    localStorage.setItem(THEME_STORAGE_KEY, theme.id);
   };
 
   const deleteCustomTheme = (id: string) => {
-    setCustomThemes(prev => {
-      const next = prev.filter(t => t.id !== id);
-      localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(next));
-      return next;
+    transitionTheme(() => {
+      setCustomThemes(prev => {
+        const next = prev.filter(t => t.id !== id);
+        localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(next));
+        return next;
+      });
+      if (currentThemeId === id) {
+        setCurrentThemeId(extDarkTheme.id);
+        localStorage.setItem(THEME_STORAGE_KEY, extDarkTheme.id);
+      }
     });
-    if (currentThemeId === id) {
-      setTheme(extDarkTheme.id);
-    }
   };
 
   const resetToDefault = () => {

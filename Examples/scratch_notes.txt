@@ -1,0 +1,5 @@
+EXT supports plain text files too!
+
+This is a standard .txt file. It won't render as Markdown in the preview, but it will open cleanly in the editor for quick scratch notes or logs.
+
+Use EXT for all your lightweight text editing needs.
