@@ -111,7 +111,7 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                     // Quick scan for TODOs without keeping content in memory
                     let mut has_todos = false;
                     if size > 0 && size < 2 * 1024 * 1024 {
-                        if let Ok(content) = fs::read_to_string(&entry_path) {
+                        if let Ok(content) = fs::read_to_string(entry_path) {
                             has_todos = content.contains("TODO") || content.contains("- [ ]") || content.contains("- [x]") || content.contains("- [X]");
                         }
                     }
@@ -137,7 +137,7 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
         }
     }
 
-    if detected_icon == "folder" && files.len() > 0 {
+    if detected_icon == "folder" && !files.is_empty() {
         detected_icon = "markdown".to_string();
     }
 
@@ -445,7 +445,7 @@ fn rename_workspace_folder(workspace_path: String, new_name: String) -> Result<S
         return Err("A folder with the new name already exists".to_string());
     }
     
-    if let Err(e) = fs::rename(&source_path, &target_path) {
+    if let Err(e) = fs::rename(source_path, &target_path) {
         return Err(format!("Failed to rename workspace folder: {}", e));
     }
     
@@ -563,8 +563,8 @@ fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, 
         let resolved_path = std::fs::canonicalize(&source_dir).unwrap_or(source_dir);
         // Windows canonicalize adds \\?\, so we strip it for cleaner paths if possible
         let path_str = resolved_path.to_string_lossy().to_string();
-        let clean_path = if path_str.starts_with(r"\\?\") {
-            path_str[4..].to_string()
+        let clean_path = if let Some(stripped) = path_str.strip_prefix(r"\\?\") {
+            stripped.to_string()
         } else {
             path_str
         };
@@ -635,13 +635,12 @@ pub fn run() {
 
             Ok(())
         })
-        .on_window_event(|window, event| match event {
-            tauri::WindowEvent::CloseRequested { api, .. } => {
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide();
                 println!("Window hidden to tray");
             }
-            _ => {}
         })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
