@@ -314,6 +314,94 @@ export const paperTheme: Theme = {
   },
 };
 
+export const gruvboxTheme: Theme = {
+  id: 'gruvbox',
+  name: 'Gruvbox',
+  description: 'Warm, retro groove color scheme.',
+  author: 'EXT',
+  mode: 'dark',
+  tokens: {
+    ...extDarkTokens,
+    '--color-bg': '#282828',
+    '--color-surface': '#3c3836',
+    '--color-surface-elevated': '#504945',
+    '--color-surface-hover': '#665c54',
+    '--color-sidebar': '#32302f',
+    '--color-editor': '#282828',
+    '--color-preview': '#282828',
+    '--color-code-bg': '#3c3836',
+
+    '--color-text-primary': '#ebdbb2',
+    '--color-text-secondary': '#a89984',
+    '--color-text-muted': '#928374',
+
+    '--color-accent': '#fabd2f',
+    '--color-accent-hover': '#d79921',
+    '--color-accent-soft': 'rgba(250, 189, 47, 0.15)',
+
+    '--color-border': '#504945',
+    '--color-border-subtle': '#3c3836',
+
+    '--color-hover': 'rgba(235, 219, 178, 0.05)',
+    '--color-active': 'rgba(250, 189, 47, 0.15)',
+    '--color-selection': 'rgba(250, 189, 47, 0.25)',
+
+    '--color-syntax-keyword': '#fb4934',
+    '--color-syntax-name': '#ebdbb2',
+    '--color-syntax-function': '#b8bb26',
+    '--color-syntax-constant': '#d3869b',
+    '--color-syntax-type': '#fabd2f',
+    '--color-syntax-operator': '#8ec07c',
+    '--color-syntax-comment': '#928374',
+    '--color-syntax-string': '#b8bb26',
+    '--color-syntax-invalid': '#cc241d',
+  },
+};
+
+export const gruvboxGlassTheme: Theme = {
+  id: 'gruvbox-glass',
+  name: 'Gruvbox Glass',
+  description: 'A translucent, glassmorphic take on the Gruvbox palette.',
+  author: 'EXT',
+  mode: 'dark',
+  tokens: {
+    ...extDarkTokens,
+    '--color-bg': '#1d2021',
+    '--color-surface': 'rgba(60, 56, 54, 0.45)',
+    '--color-surface-elevated': 'rgba(80, 73, 69, 0.65)',
+    '--color-surface-hover': 'rgba(102, 92, 84, 0.5)',
+    '--color-sidebar': 'rgba(40, 40, 40, 0.35)',
+    '--color-editor': 'rgba(40, 40, 40, 0.35)',
+    '--color-preview': 'rgba(40, 40, 40, 0.35)',
+    '--color-code-bg': 'rgba(60, 56, 54, 0.5)',
+
+    '--color-text-primary': '#ebdbb2',
+    '--color-text-secondary': '#a89984',
+    '--color-text-muted': '#928374',
+
+    '--color-accent': '#fabd2f',
+    '--color-accent-hover': '#d79921',
+    '--color-accent-soft': 'rgba(250, 189, 47, 0.12)',
+
+    '--color-border': 'rgba(80, 73, 69, 0.6)',
+    '--color-border-subtle': 'rgba(60, 56, 54, 0.4)',
+
+    '--color-hover': 'rgba(235, 219, 178, 0.04)',
+    '--color-active': 'rgba(250, 189, 47, 0.15)',
+    '--color-selection': 'rgba(250, 189, 47, 0.25)',
+
+    '--color-syntax-keyword': '#fb4934',
+    '--color-syntax-name': '#ebdbb2',
+    '--color-syntax-function': '#b8bb26',
+    '--color-syntax-constant': '#d3869b',
+    '--color-syntax-type': '#fabd2f',
+    '--color-syntax-operator': '#8ec07c',
+    '--color-syntax-comment': '#928374',
+    '--color-syntax-string': '#b8bb26',
+    '--color-syntax-invalid': '#cc241d',
+  },
+};
+
 export const BUILT_IN_THEMES: Theme[] = [
   extDarkTheme,
   materialDarkPurpleTheme,
@@ -322,4 +410,6 @@ export const BUILT_IN_THEMES: Theme[] = [
   matrixTheme,
   cyberpunkTheme,
   paperTheme,
+  gruvboxTheme,
+  gruvboxGlassTheme,
 ];

@@ -96,7 +96,6 @@ fn scan_directory(
         "obj",
     ];
 
-
     let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
         let is_hidden = e
             .file_name()
