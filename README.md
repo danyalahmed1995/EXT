@@ -139,13 +139,49 @@ npm run dev
 
 If the project uses a separate Tauri script in `package.json`, use that script instead.
 
-### Build
+## Downloads
+
+Prebuilt installers are attached to GitHub Releases.
+
+Available packages:
+
+- Windows: `.msi`
+- macOS: `.dmg`
+- Linux: `.deb` and AppImage
+
+Unsigned builds may show operating system security warnings. Code signing can be added later.
+
+## Creating a Release
+
+1. Update the version.
+2. Commit the change.
+3. Create and push a tag:
 
 ```bash
-npm run build
+git tag v0.1.0
+git push origin v0.1.0
 ```
 
-For a native desktop build, use the Tauri build script defined in `package.json`.
+4. GitHub Actions will build release artifacts.
+
+## Building Installers Locally
+
+```bash
+npm install
+npm run tauri:build
+```
+
+Generated bundles are written under:
+
+```text
+src-tauri/target/release/bundle/
+```
+
+Platform-specific packages are best built on their native OS:
+
+- Windows installers on Windows
+- macOS DMG on macOS
+- Linux packages on Linux
 
 ## Quality checks
 
