@@ -574,6 +574,7 @@ fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> 
 
 #[tauri::command]
 fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
+    let _ = &absolute_path;
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("powershell")
