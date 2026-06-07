@@ -96,7 +96,6 @@ fn scan_directory(
         "obj",
     ];
 
-    let mut counter = 0;
 
     let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
         let is_hidden = e
@@ -155,10 +154,8 @@ fn scan_directory(
                         }
                     }
 
-                    counter += 1;
-
                     files.push(ScannedFile {
-                        id: format!("{}-file-{}", workspace_id, counter),
+                        id: format!("{}-{}", workspace_id, relative_path.replace("\\", "/")),
                         workspace_id: workspace_id.clone(),
                         name,
                         extension: format!(".{}", ext_lower),

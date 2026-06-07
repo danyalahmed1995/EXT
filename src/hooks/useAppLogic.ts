@@ -378,13 +378,19 @@ export function useAppLogic() {
 
   const handleTabClose = useCallback(
     (tabId: string) => {
-      setOpenTabs((tabs) => tabs.filter((t) => t.id !== tabId));
+      const index = openTabs.findIndex(t => t.id === tabId);
+      if (index === -1) return;
+      
       if (activeFileId === tabId) {
-        const remaining = openTabs.filter((t) => t.id !== tabId);
-        setActiveFileId(
-          remaining.length > 0 ? remaining[remaining.length - 1].id : null
-        );
+        if (openTabs.length === 1) {
+          setActiveFileId(null);
+        } else if (index === 0) {
+          setActiveFileId(openTabs[1].id); // Shift right if it's the first tab
+        } else {
+          setActiveFileId(openTabs[index - 1].id); // Shift left otherwise
+        }
       }
+      setOpenTabs((tabs) => tabs.filter((t) => t.id !== tabId));
     },
     [activeFileId, openTabs]
   );
@@ -677,7 +683,8 @@ export function useAppLogic() {
         newName,
       });
 
-      renamedFile.id = file.id;
+      const newId = `${ws.id}-${renamedFile.relativePath.replace(/\\/g, '/')}`;
+      renamedFile.id = newId;
       renamedFile.workspaceId = ws.id;
       renamedFile.workspace = ws.name;
       renamedFile.isFavorite = file.isFavorite;
@@ -856,15 +863,14 @@ export function useAppLogic() {
       setFiles((prev) => prev.filter((f) => f.id !== fileId));
 
       // Close tab if open
-      setOpenTabs((prev) => prev.filter((t) => t.id !== fileId));
-      if (activeFileId === fileId) {
-        setActiveFileId(null);
+      if (openTabs.some(t => t.id === fileId)) {
+        handleTabClose(fileId);
       }
     } catch (err) {
       console.error('Failed to delete file:', err);
       alert(`Failed to delete file: ${err}`);
     }
-  }, [files, workspaces, activeFileId]);
+  }, [files, workspaces, activeFileId, openTabs, handleTabClose]);
 
   // ── Bulk Delete Files Handler ───────────────────────
 
@@ -892,18 +898,21 @@ export function useAppLogic() {
       }
 
       setFiles((prev) => prev.filter((f) => !selectedFiles.has(f.id)));
-      setOpenTabs((prev) => prev.filter((t) => !selectedFiles.has(t.id)));
       
-      if (activeFileId && selectedFiles.has(activeFileId)) {
-        setActiveFileId(null);
+      // Close tabs if open
+      for (const fileId of selectedFiles) {
+        if (openTabs.some(t => t.id === fileId)) {
+          handleTabClose(fileId);
+        }
       }
+      
       setSelectedFiles(new Set());
       showToast(`Deleted ${selectedFiles.size} files`);
     } catch (err) {
       console.error('Failed to bulk delete files:', err);
-      alert(`Failed to delete some files: ${err}`);
+      showToast(`Failed to delete files: ${err}`);
     }
-  }, [selectedFiles, files, workspaces, activeFileId]);
+  }, [selectedFiles, files, workspaces, activeFileId, openTabs, handleTabClose]);
 
   // ── Copy File Handler ───────────────────────────────
 
@@ -1059,6 +1068,46 @@ export function useAppLogic() {
   // ── External File Change Detection ──────────────────────
 
   const handleWindowFocus = useCallback(async () => {
+    // 1. Rescan all workspaces to update the file explorer
+    try {
+      let scannedFiles: FileItem[] = [];
+      const storedFavs: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
+      
+      await Promise.all(
+        workspaces.map(async (ws) => {
+          try {
+            const result: { files: FileItem[], detectedIcon: string } = await invoke('scan_directory', {
+              path: ws.path,
+              workspaceId: ws.id,
+              workspaceName: ws.name,
+            });
+            const scannedWithFavs = result.files.map(f => ({
+              ...f,
+              isFavorite: storedFavs.includes(f.id) || storedFavs.includes(f.relativePath),
+            }));
+            scannedFiles = scannedFiles.concat(scannedWithFavs);
+          } catch (err) {
+            console.error(`Failed to scan workspace ${ws.name} on focus:`, err);
+          }
+        })
+      );
+      
+      if (scannedFiles.length > 0) {
+        setFiles(scannedFiles);
+        
+        // Close tabs for files that no longer exist on disk
+        const scannedIds = new Set(scannedFiles.map(f => f.id));
+        for (const tab of openTabs) {
+          if (!scannedIds.has(tab.id)) {
+            handleTabClose(tab.id);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('Error rescanning workspaces on focus', e);
+    }
+
+    // 2. Check active file for external modification
     if (!activeFileId) return;
     const file = files.find(f => f.id === activeFileId);
     const tab = openTabs.find(t => t.id === activeFileId);
@@ -1103,7 +1152,7 @@ export function useAppLogic() {
     } catch (e) {
       console.error('Error checking external modification', e);
     }
-  }, [activeFileId, files, openTabs, workspaces]);
+  }, [activeFileId, files, openTabs, workspaces, handleTabClose]);
 
   useEffect(() => {
     const unlisten = listen('tauri://focus', handleWindowFocus);

@@ -21,8 +21,6 @@ export const extEditorTheme: Extension = EditorView.theme(
       padding: '8px 0',
       textRendering: 'optimizeLegibility',
       fontVariantLigatures: 'contextual',
-      maxWidth: '900px',
-      margin: '0 auto',
     },
     '.cm-line': {
       textShadow: '0 0 1px rgba(255, 255, 255, 0.05)',
@@ -36,7 +34,6 @@ export const extEditorTheme: Extension = EditorView.theme(
       borderLeftWidth: '2px',
       boxShadow: '0 0 10px var(--color-accent)',
       transition: 'left 0.08s cubic-bezier(0.2, 0, 0, 1), opacity 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease',
-      animation: 'cm-smooth-blink 1.2s ease-in-out infinite !important',
     },
     '&.cm-focused .cm-selectionBackground, .cm-selectionBackground, .cm-content ::selection': {
       backgroundColor: 'var(--color-selection)',
