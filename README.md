@@ -1,14 +1,14 @@
-# EXT
+# <img src="./src-tauri/icons/icon.png" width="32" align="center" alt="EXT icon" /> EXT
 
-EXT is a local-first workspace for Markdown and plain text files.
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is a local-first workspace for Markdown and plain text files.
 
 It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md` and `.txt` files, and gives you a fast place to read, search, edit, and organize them.
 
-Your files stay where they are. You can keep using Git, OneDrive, Dropbox, Obsidian, VS Code, Notepad, or any other tool alongside EXT.
+Your files stay where they are. You can keep using Git, OneDrive, Dropbox, Obsidian, VS Code, Notepad, or any other tool alongside <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT.
 
-## What EXT is
+## What <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is
 
-EXT is built for people who already have Markdown or text files spread across projects, notes, docs, and repositories.
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is built for people who already have Markdown or text files spread across projects, notes, docs, and repositories.
 
 It gives you:
 
@@ -22,7 +22,7 @@ It gives you:
 
 ## Example
 
-Here is a quick look at EXT in action:
+Here is a quick look at <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT in action:
 
 ![EXT Demo Part 1](./public/demo-example/demo_part1.gif)
 ![EXT Demo Part 2](./public/demo-example/demo_part2.gif)
@@ -33,9 +33,9 @@ Here is a quick look at EXT in action:
 ![EXT Demo Part 7](./public/demo-example/demo_part7.gif)
 ![EXT Demo Part 8](./public/demo-example/demo_part8.gif)
 
-## What EXT is not
+## What <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is not
 
-EXT is not a cloud notes platform, publishing service, collaboration suite, AI workspace, or replacement for every Markdown editor.
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is not a cloud notes platform, publishing service, collaboration suite, AI workspace, or replacement for every Markdown editor.
 
 There are no accounts, hosted documents, proprietary sync layers, or hidden note databases. If you want sync, use the filesystem tools you already trust, such as Git, OneDrive, Dropbox, or Syncthing.
 
@@ -44,7 +44,7 @@ There are no accounts, hosted documents, proprietary sync layers, or hidden note
 ### Local-first workspaces
 
 - Add existing folders as workspaces.
-- EXT scans local folders directly.
+- <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT scans local folders directly.
 - Only `.md` and `.txt` files are shown in the workspace file list.
 - Common noisy directories such as `.git`, `node_modules`, and build output folders are ignored.
 - Files can still be opened and edited by other applications.
@@ -72,7 +72,7 @@ The sidebar provides quick views for common workflows:
 
 ### Search
 
-EXT includes a fast global search bar for finding files by name across connected workspaces.
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT includes a fast global search bar for finding files by name across connected workspaces.
 
 ### Editor and preview
 
@@ -84,7 +84,7 @@ EXT includes a fast global search bar for finding files by name across connected
 - Markdown outline for heading navigation.
 - Local image rendering in preview when valid Markdown image paths are used.
 
-Image files are not added to the workspace file list and EXT does not manage image assets.
+Image files are not added to the workspace file list and <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT does not manage image assets.
 
 ### Tabs and navigation
 
@@ -95,13 +95,13 @@ Image files are not added to the workspace file list and EXT does not manage ima
 
 ### Themes and visual settings
 
-EXT includes a theme system with built-in themes and custom palette support.
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT includes a theme system with built-in themes and custom palette support.
 
 Visual polish can be configured from settings, including animations, transitions, editor focus effects, sidebar effects, and reduced-motion behavior.
 
 ### System tray
 
-Closing the window can minimize EXT to the system tray instead of quitting. From the tray, users can:
+Closing the window can minimize <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT to the system tray instead of quitting. From the tray, users can:
 
 - Open the app
 - Restart the app
@@ -111,7 +111,7 @@ Unsaved changes are protected before restart or exit.
 
 ### First-run examples
 
-On first launch, EXT creates an Examples workspace with sample Markdown files so new users can try the app without setting up their own folder first.
+On first launch, <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT creates an Examples workspace with sample Markdown files so new users can try the app without setting up their own folder first.
 
 ## Tech stack
 
@@ -217,10 +217,10 @@ The repository includes GitHub Actions workflows for frontend and Rust/Tauri che
 
 ## License
 
-EXT is licensed under the **GNU General Public License v3.0 or later** (`GPL-3.0-or-later`).
+<img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT is licensed under the **GNU General Public License v3.0 or later** (`GPL-3.0-or-later`).
 
-You are free to use, study, modify, and fork EXT. Personal forks and open-source contributions are welcome.
+You are free to use, study, modify, and fork <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT. Personal forks and open-source contributions are welcome.
 
-If you distribute a modified version of EXT, you must keep it under the same license and provide the corresponding source code. This keeps EXT and its forks open instead of allowing closed-source rebrands.
+If you distribute a modified version of <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT, you must keep it under the same license and provide the corresponding source code. This keeps <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT and its forks open instead of allowing closed-source rebrands.
 
-The EXT name, logo, icon, screenshots, and other brand assets are not covered by the GPL license grant. Do not use them in a way that suggests your fork or modified build is the official EXT app.
+The <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT name, logo, icon, screenshots, and other brand assets are not covered by the GPL license grant. Do not use them in a way that suggests your fork or modified build is the official <img src="./src-tauri/icons/icon.png" width="16" align="center" alt="EXT icon" /> EXT app.
