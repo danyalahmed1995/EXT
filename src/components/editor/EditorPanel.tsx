@@ -28,9 +28,10 @@ export interface EditorTab {
   name: string;
   extension: string;
   content: string;
-  isDirty: boolean;
-  saveStatus?: SaveStatus;
-  absolutePath?: string;
+  isDirty?: boolean;
+  saveStatus?: 'saving' | 'saved' | 'error' | 'unsaved';
+  absolutePath: string;
+  isLoading?: boolean;
 }
 
 interface EditorPanelProps {
@@ -118,7 +119,6 @@ const SortableTab: React.FC<SortableTabProps> = ({ tab, isActive, onSelect, onCl
   );
 };
 
-// ── EditorPanel Component ───────────────────────────
 
 export const EditorPanel: React.FC<EditorPanelProps> = ({
   tabs,
@@ -134,7 +134,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   previewKey,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
-
   React.useEffect(() => {
     if (activeTabId) {
       const el = document.getElementById(`editor-tab-${activeTabId}`);
@@ -211,12 +210,29 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     );
   }
 
-  const lineCount = activeTab.content.split('\n').length;
-  const charCount = activeTab.content.length;
-  const isMarkdown = activeTab.extension === '.md' || activeTab.extension === '.markdown';
+  const lineCount = activeTab.content ? activeTab.content.split('\n').length : 0;
+  const charCount = activeTab.content ? activeTab.content.length : 0;
+
+  const onRender = (
+    id: string,
+    phase: 'mount' | 'update' | 'nested-update',
+    actualDuration: number,
+    _baseDuration: number,
+    _startTime: number,
+    commitTime: number
+  ) => {
+    if (actualDuration > 16) {
+      console.warn(`[Profile] ${id} (${phase}) took ${actualDuration.toFixed(2)}ms (commit: ${commitTime})`);
+    }
+    if (actualDuration > 50) {
+      console.error(`[Profile] SERIOUS ISSUE: ${id} (${phase}) took ${actualDuration.toFixed(2)}ms!`);
+    }
+    (window as any).__lastRenderTime = actualDuration;
+  };
 
   return (
-    <div className="editor-panel" onKeyDown={handleKeyDown} tabIndex={-1}>
+    <React.Profiler id="EditorPanel" onRender={onRender}>
+      <div className="editor-panel" onKeyDown={handleKeyDown} tabIndex={-1}>
       {/* Tab Bar with integrated view switcher */}
       <div className="editor-tab-bar" onContextMenu={handleTabBarContextMenu}>
         <div 
@@ -284,35 +300,50 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       </div>
 
       {/* Content Area */}
-      <div className="editor-content" onContextMenuCapture={handleContextMenu}>
-        {(viewMode === 'editor' || viewMode === 'split') && (
-          <div className={`editor-content-editor ${viewMode === 'editor' ? 'full' : ''}`}>
-            <CodeMirrorEditor
-              key={activeTab.id}
-              content={activeTab.content}
-              onChange={(newContent) => onContentChange(activeTab.id, newContent)}
-              onSave={() => onSaveFile(activeTab.id)}
-            />
-          </div>
-        )}
+      {activeTab.isLoading ? (
+        <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column', gap: 20, color: 'var(--color-text-muted)' }}>
+           <div className="spinner" style={{ width: 40, height: 40, border: '4px solid var(--color-border)', borderTopColor: 'var(--color-accent)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+           <span>Loading massive file...</span>
+        </div>
+      ) : (
+      <div className="editor-content" style={{ position: 'relative' }} onContextMenuCapture={handleContextMenu}>
+        <div 
+          className="editor-tab-content-wrapper active"
+          style={{ flex: 1, width: '100%', height: '100%', display: 'flex' }}
+        >
+          {(viewMode === 'editor' || viewMode === 'split') && (
+            <div className={`editor-content-editor ${viewMode === 'editor' ? 'full' : ''}`}>
+              <CodeMirrorEditor
+                activeTabId={activeTab.id}
+                content={activeTab.content}
+                onChange={(newContent) => onContentChange(activeTab.id, newContent)}
+                onSave={() => onSaveFile(activeTab.id)}
+                isActive={true}
+              />
+            </div>
+          )}
 
-        {(viewMode === 'preview' || viewMode === 'split') && isMarkdown && (
-          <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
-            <MarkdownPreview key={previewKey} content={activeTab.content} absolutePath={activeTab.absolutePath} />
-          </div>
-        )}
+          {(viewMode === 'preview' || viewMode === 'split') && (activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+            <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
+              <MarkdownPreview key={`${activeTab.id}-${previewKey}`} content={activeTab.content} absolutePath={activeTab.absolutePath} isActive={true} />
+            </div>
+          )}
 
-        {viewMode === 'preview' && !isMarkdown && (
-          <div className="editor-content-editor full">
-            <CodeMirrorEditor
-              key={activeTab.id}
-              content={activeTab.content}
-              onChange={(newContent) => onContentChange(activeTab.id, newContent)}
-              onSave={() => onSaveFile(activeTab.id)}
-            />
-          </div>
-        )}
+          {viewMode === 'preview' && !(activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+            <div className="editor-content-editor full">
+              <CodeMirrorEditor
+                activeTabId={activeTab.id}
+                content={activeTab.content}
+                onChange={(newContent) => onContentChange(activeTab.id, newContent)}
+                onSave={() => onSaveFile(activeTab.id)}
+                isActive={true}
+              />
+            </div>
+          )}
+        </div>
       </div>
+      )}
 
       {/* Status Bar */}
       <div className="editor-statusbar">
@@ -331,5 +362,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <span className="editor-statusbar-item">UTF-8</span>
       </div>
     </div>
+    </React.Profiler>
   );
 };

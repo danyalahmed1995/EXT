@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, startTransition } from 'react';
 import { ViewMode, EditorTab } from '../components/editor/EditorPanel';
 import { ContextMenuItem } from '../components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
@@ -32,6 +32,8 @@ export function useAppLogic() {
     editorFocus: true,
     previewTransitions: true,
     reduceMotion: false,
+    enableProfiler: false,
+    previewCentered: false,
   });
 
   // UI State
@@ -90,6 +92,8 @@ export function useAppLogic() {
           editorFocus: true,
           previewTransitions: true,
           reduceMotion: window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
+          enableProfiler: false,
+          previewCentered: false,
         };
         const storedAppearance: AppearanceSettings = JSON.parse(localStorage.getItem('ext_appearance') || 'null') || defaultAppearance;
         
@@ -341,39 +345,35 @@ export function useAppLogic() {
         const file = files.find((f) => f.id === fileId);
         const workspace = workspaces.find((w) => w.id === file?.workspaceId);
         if (file && workspace) {
-          // If the file is >2MB, the content might be a placeholder. We should really read it here via invoke('read_file')
-          // but for now we will just use the content we got, or maybe fetch it.
-          // Since the prompt requires MVP and 2MB limit was added, we can read the file live.
+          
+          // Instantly insert a loading tab so the UI doesn't jump to empty
+          setOpenTabs((tabs) => [
+            ...tabs,
+            {
+              id: file.id,
+              name: file.name,
+              extension: file.extension,
+              content: '',
+              isDirty: false,
+              absolutePath: file.absolutePath,
+              isLoading: true
+            },
+          ]);
+
           invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
-            setOpenTabs((tabs) => [
-              ...tabs,
-              {
-                id: file.id,
-                name: file.name,
-                extension: file.extension,
-                content: content || '',
-                isDirty: false,
-                absolutePath: file.absolutePath,
-              },
-            ]);
+            // Update the tab with the real content and stop loading spinner
+            startTransition(() => {
+              setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', isLoading: false } : t));
+            });
           }).catch(() => {
-             // Fallback
-             setOpenTabs((tabs) => [
-              ...tabs,
-              {
-                id: file.id,
-                name: file.name,
-                extension: file.extension,
-                content: '',
-                isDirty: false,
-                absolutePath: file.absolutePath,
-              },
-            ]);
+             startTransition(() => {
+               setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: '', isLoading: false } : t));
+             });
           });
         }
       }
     },
-    [openTabs, files]
+    [openTabs, files, workspaces]
   );
 
   const handleTabClose = useCallback(

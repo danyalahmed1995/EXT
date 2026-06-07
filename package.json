@@ -11,7 +11,8 @@
     "test": "vitest run",
     "test:ui": "vitest --ui",
     "tauri:build": "tauri build",
-    "tauri:build:debug": "tauri build --debug"
+    "tauri:build:debug": "tauri build --debug",
+    "benchmark:large-md": "node --expose-gc --max-old-space-size=8192 scripts/benchmark.js"
   },
   "dependencies": {
     "@codemirror/commands": "^6.10.3",
@@ -27,8 +28,11 @@
     "@tauri-apps/api": "^2.11.0",
     "@tauri-apps/plugin-dialog": "^2.7.1",
     "@tauri-apps/plugin-opener": "^2",
+    "@vscode/markdown-it-katex": "^1.1.2",
     "codemirror": "^6.0.2",
     "dompurify": "^3.4.8",
+    "katex": "^0.17.0",
+    "linkedom": "^0.18.12",
     "markdown-it": "^14.2.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"

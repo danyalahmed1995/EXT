@@ -70,6 +70,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ appearance, onUpda
                 <input type="checkbox" checked={appearance.reduceMotion} onChange={() => handleToggle('reduceMotion')} />
                 <span className="toggle-label">Reduce motion mode</span>
               </label>
+
+              <label className="settings-toggle">
+                <input type="checkbox" checked={!!appearance.previewCentered} onChange={() => handleToggle('previewCentered')} />
+                <span className="toggle-label">Center preview content (reading mode)</span>
+              </label>
+
+              <label className="settings-toggle" style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border-subtle)' }}>
+                <input type="checkbox" checked={!!appearance.enableProfiler} onChange={() => handleToggle('enableProfiler')} />
+                <span className="toggle-label">Enable Navigation Profiler (Debug)</span>
+              </label>
             </div>
           </section>
 

@@ -1,6 +1,9 @@
 # Dependencies
 node_modules/
 
+
+Benchmark Files/report/
+
 # Frontend build output
 dist/
 build/

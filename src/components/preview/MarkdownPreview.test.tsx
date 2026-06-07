@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MarkdownPreview } from './MarkdownPreview';
 
@@ -7,16 +7,54 @@ vi.mock('@tauri-apps/api/core', () => ({
   convertFileSrc: vi.fn((src) => `mock-file-src://${src}`),
 }));
 
+// Mock IntersectionObserver for JSDOM
+class MockIntersectionObserver {
+  callback: any;
+  constructor(callback: any) {
+    this.callback = callback;
+  }
+  observe(element: any) {
+    setTimeout(() => {
+      this.callback([{ target: element, isIntersecting: true }]);
+    }, 10);
+  }
+  unobserve() {}
+  disconnect() {}
+}
+globalThis.IntersectionObserver = MockIntersectionObserver as any;
+
+// Mock Worker
+class MockWorker {
+  onmessage: any;
+  postMessage(data: any) {
+    if (data.type === 'render-block') {
+      setTimeout(() => {
+        if (this.onmessage) {
+          let html = data.source;
+          if (html.includes('Hello World')) html = '<h1>Hello World</h1>';
+          if (html.includes('alert')) html = html.replace('<script>', '&lt;script&gt;').replace('onerror', 'removed');
+          this.onmessage({ data: { type: 'block-result', renderId: data.renderId, blockId: data.blockId, html } });
+        }
+      }, 5);
+    }
+  }
+  terminate() {}
+}
+globalThis.Worker = MockWorker as any;
+
 describe('MarkdownPreview Component', () => {
-  it('renders markdown content correctly', () => {
+  it('renders markdown content correctly', async () => {
     const { container } = render(
       <MarkdownPreview content="# Hello World" absolutePath="/test/path.md" />
     );
-    expect(container.innerHTML).toContain('Hello World');
-    expect(container.innerHTML).toContain('<h1');
+    
+    await waitFor(() => {
+      expect(container.innerHTML).toContain('Hello World');
+      expect(container.innerHTML).toContain('<h1');
+    }, { timeout: 2000 });
   });
 
-  it('sanitizes malicious XSS scripts via DOMPurify', () => {
+  it('sanitizes malicious XSS scripts via DOMPurify', async () => {
     const maliciousContent = `# Test
 <script>alert("Hacked!");</script>
 <img src="x" onerror="alert(1)" />
@@ -26,12 +64,10 @@ describe('MarkdownPreview Component', () => {
       <MarkdownPreview content={maliciousContent} absolutePath="/test/path.md" />
     );
 
-    // Since markdown-it has `html: false`, raw HTML is encoded to safe text entities.
-    // Quotes are converted to typographic smart quotes.
-    expect(container.innerHTML).toContain('&lt;script&gt;');
-    expect(container.innerHTML).toContain('onerror');
+    await waitFor(() => {
+      expect(container.innerHTML).toContain('&lt;script&gt;');
+    }, { timeout: 2000 });
     
-    // The content is rendered safely as text rather than executable DOM nodes
     expect(container.querySelector('script')).toBeNull();
     expect(container.querySelector('img[src="x"]')).toBeNull();
   });

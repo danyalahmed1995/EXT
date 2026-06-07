@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { FileList } from './components/file-list/FileList';
@@ -14,6 +15,9 @@ import { useIdleState } from './hooks/useIdleState';
 
 function App() {
   useIdleState(); // Start tracking global idle state
+
+  const [isProfiling, setIsProfiling] = useState(false);
+  const [profileResults, setProfileResults] = useState<string | null>(null);
 
   const {
   activeView,
@@ -68,18 +72,59 @@ function App() {
   handleDragEnd
 } = useAppLogic();
 
+  // ── Run Profile Automation ────────────────────────
+  const runProfile = async () => {
+    if (openTabs.length < 2) {
+      alert("Please open at least 2 large files in tabs before running the profile.");
+      return;
+    }
+    
+    setIsProfiling(true);
+    setProfileResults(null);
+    let log = "=== NAVIGATION PROFILE ===\n";
+    let maxDelay = 0;
+    let over50Count = 0;
+
+    for (let i = 0; i < 20; i++) {
+      const fileId = openTabs[i % openTabs.length].id;
+      const start = performance.now();
+      
+      // Trigger navigation
+      handleFileSelect(fileId);
+      
+      // Wait for React to render and browser to paint
+      await new Promise(r => setTimeout(r, 0));
+      await new Promise(r => requestAnimationFrame(r));
+      
+      const end = performance.now();
+      const delay = end - start;
+      maxDelay = Math.max(maxDelay, delay);
+      
+      if (delay > 50) over50Count++;
+      log += `Switch ${i + 1} to ${fileId.substring(0, 8)}: ${delay.toFixed(2)}ms\n`;
+      
+      // Let the system settle slightly to simulate rapid user clicking but not 0ms
+      await new Promise(r => setTimeout(r, 100));
+    }
+    
+    log += `\nMax Frame Delay: ${maxDelay.toFixed(2)}ms\n`;
+    log += `Switches > 50ms: ${over50Count}/20\n`;
+    
+    setProfileResults(log);
+    setIsProfiling(false);
+  };
+
 // ── Render ────────────────────────────────────────
 
   return (
     <div 
-      className="app-container"
+      className={`app-container ${appearance.premiumEffects ? 'premium-effects' : ''} ${appearance.smoothTabs ? 'smooth-tabs' : ''}`}
       data-animations={appearance.animations}
-      data-premium-effects={appearance.premiumEffects}
-      data-smooth-tabs={appearance.smoothTabs}
       data-sidebar-hover={appearance.sidebarHover}
       data-editor-focus={appearance.editorFocus}
       data-preview-transitions={appearance.previewTransitions}
       data-reduce-motion={appearance.reduceMotion}
+      data-preview-centered={appearance.previewCentered}
     >
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
         <AppShell
@@ -200,6 +245,40 @@ function App() {
         </div>
       )}
       </DndContext>
+      {/* Profiler UI Overlay */}
+      {appearance.enableProfiler && (
+        <div style={{ position: 'fixed', bottom: 20, right: 20, zIndex: 99999, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {openTabs.length > 1 && (
+            <button 
+              onClick={runProfile}
+              disabled={isProfiling}
+              style={{
+                padding: '10px 16px',
+                backgroundColor: 'var(--color-accent)',
+                color: '#fff',
+                border: 'none',
+                borderRadius: 6,
+                fontWeight: 500,
+                cursor: isProfiling ? 'wait' : 'pointer',
+                opacity: isProfiling ? 0.7 : 1,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.2)'
+              }}
+            >
+              {isProfiling ? 'Profiling...' : 'Run Navigation Profile'}
+            </button>
+          )}
+          {profileResults && (
+            <div style={{ background: 'rgba(0,0,0,0.9)', color: '#0f0', padding: '15px', borderRadius: '8px', fontFamily: 'monospace', whiteSpace: 'pre-wrap', maxHeight: '400px', overflowY: 'auto', border: '1px solid #333' }}>
+              <div style={{display: 'flex', justifyContent: 'space-between', marginBottom: 10}}>
+                <strong>Results:</strong>
+                <button onClick={() => setProfileResults(null)} style={{background: 'transparent', color: '#fff', border: 'none', cursor: 'pointer'}}>Close</button>
+              </div>
+              {profileResults}
+            </div>
+          )}
+        </div>
+      )}
+
     </div>
   );
 }

@@ -30,4 +30,6 @@ export interface AppearanceSettings {
   editorFocus: boolean;
   previewTransitions: boolean;
   reduceMotion: boolean;
+  enableProfiler?: boolean;
+  previewCentered?: boolean;
 }
