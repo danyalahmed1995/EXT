@@ -20,6 +20,19 @@ It gives you:
 - a polished desktop UI
 - direct control over your data
 
+## Example
+
+Here is a quick look at EXT in action:
+
+![EXT Demo Part 1](./public/demo-example/demo_part1.gif)
+![EXT Demo Part 2](./public/demo-example/demo_part2.gif)
+![EXT Demo Part 3](./public/demo-example/demo_part3.gif)
+![EXT Demo Part 4](./public/demo-example/demo_part4.gif)
+![EXT Demo Part 5](./public/demo-example/demo_part5.gif)
+![EXT Demo Part 6](./public/demo-example/demo_part6.gif)
+![EXT Demo Part 7](./public/demo-example/demo_part7.gif)
+![EXT Demo Part 8](./public/demo-example/demo_part8.gif)
+
 ## What EXT is not
 
 EXT is not a cloud notes platform, publishing service, collaboration suite, AI workspace, or replacement for every Markdown editor.
