@@ -1,4 +1,4 @@
-import { render, waitFor, screen } from '@testing-library/react';
+import { render, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import { MarkdownPreview } from './MarkdownPreview';
 
@@ -21,7 +21,7 @@ class MockIntersectionObserver {
   unobserve() {}
   disconnect() {}
 }
-global.IntersectionObserver = MockIntersectionObserver as any;
+globalThis.IntersectionObserver = MockIntersectionObserver as any;
 
 // Mock Worker
 class MockWorker {
@@ -40,7 +40,7 @@ class MockWorker {
   }
   terminate() {}
 }
-global.Worker = MockWorker as any;
+globalThis.Worker = MockWorker as any;
 
 describe('MarkdownPreview Component', () => {
   it('renders markdown content correctly', async () => {
