@@ -84,12 +84,6 @@ EXT includes a fast global search bar for finding files by name across connected
 - Markdown outline for heading navigation.
 - Local image rendering in preview when valid Markdown image paths are used.
 
-Example:
-
-```md
-![Diagram](./assets/diagram.png)
-```
-
 Image files are not added to the workspace file list and EXT does not manage image assets.
 
 ### Tabs and navigation
