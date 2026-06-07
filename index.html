@@ -13,6 +13,30 @@
       /* Prevent white flash on load */
       html, body { background: #000000; }
     </style>
+    <script>
+      window.addEventListener('error', (event) => {
+        const errorDiv = document.createElement('div');
+        errorDiv.style = 'position:fixed;top:0;left:0;z-index:9999;background:red;color:white;padding:20px;width:100%;font-size:16px;white-space:pre-wrap;';
+        errorDiv.innerText = `Error: ${event.message}\n${event.error ? event.error.stack : ''}`;
+        document.body.appendChild(errorDiv);
+      });
+      window.addEventListener('unhandledrejection', (event) => {
+        const errorDiv = document.createElement('div');
+        errorDiv.style = 'position:fixed;top:0;left:0;z-index:9999;background:orange;color:white;padding:20px;width:100%;font-size:16px;white-space:pre-wrap;';
+        errorDiv.innerText = `Unhandled Promise Rejection: ${event.reason}`;
+        document.body.appendChild(errorDiv);
+      });
+      const originalConsoleError = console.error;
+      console.error = function(...args) {
+        if(args[0] && args[0].message && args[0].stack) {
+           const errorDiv = document.createElement('div');
+           errorDiv.style = 'position:fixed;top:0;left:0;z-index:9999;background:darkred;color:white;padding:20px;width:100%;font-size:16px;white-space:pre-wrap;';
+           errorDiv.innerText = `Console Error: ${args[0].message}\n${args[0].stack}`;
+           document.body.appendChild(errorDiv);
+        }
+        originalConsoleError.apply(console, args);
+      };
+    </script>
   </head>
   <body>
     <div id="root"></div>

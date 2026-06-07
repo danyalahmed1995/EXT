@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useMemo } from 'react';
 import { EditorView, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
@@ -9,18 +9,32 @@ import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/sea
 import { extEditorTheme, extHighlightStyle } from '../../styles/editor-theme';
 
 interface CodeMirrorEditorProps {
+  activeTabId: string;
   content: string;
   onChange?: (content: string) => void;
   onSave?: () => void;
+  isActive?: boolean;
 }
 
+interface CachedState {
+  state: EditorState;
+  scrollTop: number;
+  scrollLeft: number;
+}
+
+const MAX_CACHED_STATES = 15;
+
 export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
+  activeTabId,
   content,
   onChange,
   onSave,
+  isActive,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
+  const stateCache = useRef<Map<string, CachedState>>(new Map());
+  const prevTabId = useRef<string | null>(null);
   
   // Use refs for callbacks to avoid stale closures inside CodeMirror setup
   const onChangeRef = useRef(onChange);
@@ -32,59 +46,53 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     onSaveRef.current = onSave;
   }, [onChange, onSave]);
 
+  const extensions = useMemo(() => [
+    lineNumbers(),
+    highlightActiveLine(),
+    highlightSpecialChars(),
+    drawSelection(),
+    indentOnInput(),
+    bracketMatching(),
+    foldGutter(),
+    highlightSelectionMatches(),
+    search({ top: true }),
+    history(),
+    keymap.of([
+      ...defaultKeymap, 
+      ...historyKeymap, 
+      ...searchKeymap,
+      {
+        key: 'Mod-s',
+        preventDefault: true,
+        run: (view) => {
+          if (timeoutRef.current) clearTimeout(timeoutRef.current);
+          if (onChangeRef.current) onChangeRef.current(view.state.doc.toString());
+          if (onSaveRef.current) onSaveRef.current();
+          return true;
+        }
+      }
+    ]),
+    markdown({ codeLanguages: languages }),
+    extEditorTheme,
+    extHighlightStyle,
+    EditorView.lineWrapping,
+    EditorView.contentAttributes.of({ spellcheck: "true" }),
+    EditorView.updateListener.of((update) => {
+      if (update.docChanged && onChangeRef.current) {
+        const newContent = update.state.doc.toString();
+        if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        timeoutRef.current = setTimeout(() => {
+          if (onChangeRef.current) onChangeRef.current(newContent);
+        }, 300);
+      }
+    }),
+  ], []);
+
+  // Initialize EditorView exactly once
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const state = EditorState.create({
-      doc: content,
-      extensions: [
-        lineNumbers(),
-        highlightActiveLine(),
-        highlightSpecialChars(),
-        drawSelection(),
-        indentOnInput(),
-        bracketMatching(),
-        foldGutter(),
-        highlightSelectionMatches(),
-        search({ top: true }),
-        history(),
-        keymap.of([
-          ...defaultKeymap, 
-          ...historyKeymap, 
-          ...searchKeymap,
-          {
-            key: 'Mod-s',
-            preventDefault: true,
-            run: (view) => {
-              // Force immediate sync before saving
-              if (timeoutRef.current) clearTimeout(timeoutRef.current);
-              if (onChangeRef.current) onChangeRef.current(view.state.doc.toString());
-              if (onSaveRef.current) onSaveRef.current();
-              return true;
-            }
-          }
-        ]),
-        markdown({ codeLanguages: languages }),
-        extEditorTheme,
-        extHighlightStyle,
-        EditorView.lineWrapping,
-        EditorView.contentAttributes.of({ spellcheck: "true" }),
-        EditorView.updateListener.of((update) => {
-          if (update.docChanged && onChangeRef.current) {
-            const newContent = update.state.doc.toString();
-            
-            // Debounce to prevent React re-renders from lagging the editor
-            if (timeoutRef.current) clearTimeout(timeoutRef.current);
-            timeoutRef.current = setTimeout(() => {
-              if (onChangeRef.current) onChangeRef.current(newContent);
-            }, 300);
-          }
-        }),
-      ],
-    });
-
     const view = new EditorView({
-      state,
       parent: containerRef.current,
     });
 
@@ -94,12 +102,70 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
       view.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Handle Tab Switching and Content Updates
+  useEffect(() => {
+    if (!viewRef.current) return;
+    const view = viewRef.current;
+
+    if (prevTabId.current && prevTabId.current !== activeTabId) {
+      const prevId = prevTabId.current;
+      stateCache.current.set(prevId, {
+        state: view.state,
+        scrollTop: view.scrollDOM.scrollTop,
+        scrollLeft: view.scrollDOM.scrollLeft
+      });
+    }
+
+    // 2. Handle active tab
+    if (prevTabId.current !== activeTabId) {
+      let cached = stateCache.current.get(activeTabId);
+      if (cached) {
+        // LRU bump
+        stateCache.current.delete(activeTabId);
+        stateCache.current.set(activeTabId, cached);
+        
+        view.setState(cached.state);
+        
+        // Restore scroll after paint
+        requestAnimationFrame(() => {
+          view.scrollDOM.scrollTop = cached.scrollTop;
+          view.scrollDOM.scrollLeft = cached.scrollLeft;
+        });
+      } else {
+        // Cold mount
+        const newState = EditorState.create({
+          doc: content,
+          extensions
+        });
+        view.setState(newState);
+        stateCache.current.set(activeTabId, { state: newState, scrollTop: 0, scrollLeft: 0 });
+        
+        if (stateCache.current.size > MAX_CACHED_STATES) {
+          const firstKey = stateCache.current.keys().next().value;
+          if (firstKey !== undefined) {
+            stateCache.current.delete(firstKey);
+          }
+        }
+      }
+      prevTabId.current = activeTabId;
+    } else {
+      // Same tab, handle external content changes (e.g., file reload)
+      if (view.state.doc.toString() !== content) {
+        const newState = EditorState.create({
+          doc: content,
+          extensions
+        });
+        view.setState(newState);
+      }
+    }
+  }, [activeTabId, content, extensions]);
+
+  // Handle external commands
   useEffect(() => {
     const handleCopy = () => {
-      if (viewRef.current) {
+      if (viewRef.current && isActive) {
         const selection = viewRef.current.state.sliceDoc(
           viewRef.current.state.selection.main.from,
           viewRef.current.state.selection.main.to
@@ -110,7 +176,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       }
     };
     const handleDelete = () => {
-      if (viewRef.current) {
+      if (viewRef.current && isActive) {
         viewRef.current.dispatch({
           changes: {
             from: viewRef.current.state.selection.main.from,
@@ -126,20 +192,14 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       window.removeEventListener('editor-copy', handleCopy);
       window.removeEventListener('editor-delete', handleDelete);
     };
-  }, []);
-
-  // The CodeMirrorEditor is completely unmounted/remounted when switching tabs
-  // due to the `key={activeTab.id}` prop in EditorPanel.tsx.
-  // We do not need to sync `content` back into the view on every change,
-  // which causes cursor jumping and lag during fast typing.
+  }, [isActive]);
 
   useEffect(() => {
     const handleScrollToLine = (e: Event) => {
       const customEvent = e as CustomEvent;
       const { lineIndex } = customEvent.detail;
-      if (viewRef.current && typeof lineIndex === 'number') {
+      if (viewRef.current && typeof lineIndex === 'number' && isActive) {
         const view = viewRef.current;
-        // Make sure line is within bounds (1-indexed for CM)
         const targetLine = Math.min(Math.max(1, lineIndex + 1), view.state.doc.lines);
         const lineInfo = view.state.doc.line(targetLine);
         
@@ -147,17 +207,13 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
           selection: { anchor: lineInfo.from, head: lineInfo.from },
           effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' })
         });
-        
-        // Optional: refocus the editor
         view.focus();
       }
     };
 
     window.addEventListener('editor-scroll-to-line', handleScrollToLine);
     return () => window.removeEventListener('editor-scroll-to-line', handleScrollToLine);
-  }, []);
+  }, [isActive]);
 
-  return (
-    <div className="codemirror-wrapper" ref={containerRef} />
-  );
+  return <div className="codemirror-wrapper" ref={containerRef} />;
 };
