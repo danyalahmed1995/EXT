@@ -64,6 +64,19 @@ body {
   100% { background-position: 0% 100%; }
 }
 
+/* ── Idle Animation Pausing ── */
+.app-is-idle *,
+.app-is-idle ::before,
+.app-is-idle ::after {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #root {
+    animation: none !important;
+  }
+}
+
 
 /* ----------------------------------------------------------
    Scrollbar — Thin, themed, WebKit

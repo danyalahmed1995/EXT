@@ -10,8 +10,11 @@ import { DndContext, pointerWithin } from '@dnd-kit/core';
 
 
 import { useAppLogic } from './hooks/useAppLogic';
+import { useIdleState } from './hooks/useIdleState';
 
 function App() {
+  useIdleState(); // Start tracking global idle state
+
   const {
   activeView,
   setActiveView,
