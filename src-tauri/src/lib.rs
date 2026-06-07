@@ -2,24 +2,24 @@ use chrono::{DateTime, Utc};
 use serde::Serialize;
 use std::fs;
 use std::path::{Path, PathBuf};
-use walkdir::WalkDir;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     Emitter, Manager,
 };
+use walkdir::WalkDir;
 
 fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBuf, String> {
     let root = Path::new(workspace_path);
     let joined = root.join(relative_path);
-    
+
     // Normalize path to check for directory traversal
     let joined_str = joined.to_string_lossy();
     if joined_str.contains("..") {
         eprintln!("SECURITY: Path traversal attempt blocked: {}", joined_str);
         return Err("Path traversal detected".to_string());
     }
-    
+
     Ok(joined)
 }
 
@@ -54,7 +54,11 @@ pub struct ScannedFile {
 }
 
 #[tauri::command]
-fn scan_directory(path: String, workspace_id: String, workspace_name: String) -> Result<ScanResult, String> {
+fn scan_directory(
+    path: String,
+    workspace_id: String,
+    workspace_name: String,
+) -> Result<ScanResult, String> {
     let mut files = Vec::new();
     let root = Path::new(&path);
 
@@ -72,15 +76,39 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
     }
 
     let ignored_dirs = vec![
-        ".git", "node_modules", "dist", "build", "target", ".next", "out", "coverage", "vendor",
-        "Library", "Temp", "tmp", ".cache", ".turbo", ".venv", "venv", "bin", "obj",
+        ".git",
+        "node_modules",
+        "dist",
+        "build",
+        "target",
+        ".next",
+        "out",
+        "coverage",
+        "vendor",
+        "Library",
+        "Temp",
+        "tmp",
+        ".cache",
+        ".turbo",
+        ".venv",
+        "venv",
+        "bin",
+        "obj",
     ];
 
     let mut counter = 0;
 
     let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
-        let is_hidden = e.file_name().to_str().map(|s| s.starts_with(".")).unwrap_or(false);
-        let is_ignored = e.file_name().to_str().map(|s| ignored_dirs.contains(&s)).unwrap_or(false);
+        let is_hidden = e
+            .file_name()
+            .to_str()
+            .map(|s| s.starts_with("."))
+            .unwrap_or(false);
+        let is_ignored = e
+            .file_name()
+            .to_str()
+            .map(|s| ignored_dirs.contains(&s))
+            .unwrap_or(false);
         // Exclude ignored dirs entirely, and normally we might exclude hidden dirs but .github etc might be useful.
         // Let's just exclude our hardcoded ignored dirs.
         !is_ignored && (!is_hidden || e.depth() == 0 || e.file_name() == ".github")
@@ -92,9 +120,17 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
             if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
                 let ext_lower = ext.to_lowercase();
                 if ext_lower == "md" || ext_lower == "markdown" || ext_lower == "txt" {
-                    let name = entry_path.file_name().unwrap_or_default().to_string_lossy().to_string();
-                    let relative_path = entry_path.strip_prefix(root).unwrap_or(entry_path).to_string_lossy().to_string();
-                    
+                    let name = entry_path
+                        .file_name()
+                        .unwrap_or_default()
+                        .to_string_lossy()
+                        .to_string();
+                    let relative_path = entry_path
+                        .strip_prefix(root)
+                        .unwrap_or(entry_path)
+                        .to_string_lossy()
+                        .to_string();
+
                     let modified_at = match entry.metadata() {
                         Ok(m) => match m.modified() {
                             Ok(sys_time) => {
@@ -105,19 +141,22 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
                         },
                         Err(_) => Utc::now().to_rfc3339(),
                     };
-                    
+
                     let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
-                    
+
                     // Quick scan for TODOs without keeping content in memory
                     let mut has_todos = false;
                     if size > 0 && size < 2 * 1024 * 1024 {
                         if let Ok(content) = fs::read_to_string(entry_path) {
-                            has_todos = content.contains("TODO") || content.contains("- [ ]") || content.contains("- [x]") || content.contains("- [X]");
+                            has_todos = content.contains("TODO")
+                                || content.contains("- [ ]")
+                                || content.contains("- [x]")
+                                || content.contains("- [X]");
                         }
                     }
-                    
+
                     counter += 1;
-                    
+
                     files.push(ScannedFile {
                         id: format!("{}-file-{}", workspace_id, counter),
                         workspace_id: workspace_id.clone(),
@@ -148,9 +187,14 @@ fn scan_directory(path: String, workspace_id: String, workspace_name: String) ->
 }
 
 #[tauri::command]
-fn create_file(workspace_path: String, workspace_id: String, workspace_name: String, file_name: String) -> Result<ScannedFile, String> {
+fn create_file(
+    workspace_path: String,
+    workspace_id: String,
+    workspace_name: String,
+    file_name: String,
+) -> Result<ScannedFile, String> {
     let file_path = resolve_safe_path(&workspace_path, &file_name)?;
-    
+
     // Check if the extension is valid
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let ext_lower = ext.to_lowercase();
@@ -163,7 +207,10 @@ fn create_file(workspace_path: String, workspace_id: String, workspace_name: Str
     }
 
     let content = if ext_lower == "md" || ext_lower == "markdown" {
-        format!("# {}\n\n", file_path.file_stem().unwrap_or_default().to_string_lossy())
+        format!(
+            "# {}\n\n",
+            file_path.file_stem().unwrap_or_default().to_string_lossy()
+        )
     } else {
         String::new()
     };
@@ -179,7 +226,7 @@ fn create_file(workspace_path: String, workspace_id: String, workspace_name: Str
         }
         Err(_) => Utc::now().to_rfc3339(),
     };
-    
+
     let size = fs::metadata(&file_path).map(|m| m.len()).unwrap_or(0);
 
     Ok(ScannedFile {
@@ -201,7 +248,7 @@ fn create_file(workspace_path: String, workspace_id: String, workspace_name: Str
 #[tauri::command]
 fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, String> {
     let root = Path::new(&base_path).join(&name);
-    
+
     // Create the directory if it doesn't exist
     if let Err(e) = fs::create_dir_all(&root) {
         return Err(format!("Failed to create workspace directory: {}", e));
@@ -209,7 +256,7 @@ fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, Stri
 
     let readme_path = root.join("README.md");
     let content = format!("# {}\n\nStart writing here...\n", name);
-    
+
     // Create the README.md file
     if let Err(e) = fs::write(&readme_path, &content) {
         return Err(format!("Failed to create README.md: {}", e));
@@ -222,7 +269,7 @@ fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, Stri
         }
         Err(_) => Utc::now().to_rfc3339(),
     };
-    
+
     let size = fs::metadata(&readme_path).map(|m| m.len()).unwrap_or(0);
 
     Ok(ScannedFile {
@@ -242,17 +289,21 @@ fn create_workspace(name: String, base_path: String) -> Result<ScannedFile, Stri
 }
 
 #[tauri::command]
-fn save_file(workspace_path: String, relative_path: String, content: String) -> Result<String, String> {
+fn save_file(
+    workspace_path: String,
+    relative_path: String,
+    content: String,
+) -> Result<String, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
-    
+
     if let Err(e) = fs::write(&file_path, &content) {
         return Err(format!("Failed to save file: {}", e));
     }
-    
+
     let modified_at = match fs::metadata(&file_path).and_then(|m| m.modified()) {
         Ok(sys_time) => {
             let dt: DateTime<Utc> = sys_time.into();
@@ -260,25 +311,29 @@ fn save_file(workspace_path: String, relative_path: String, content: String) -> 
         }
         Err(_) => Utc::now().to_rfc3339(),
     };
-    
+
     Ok(modified_at)
 }
 
 #[tauri::command]
-fn move_file(source_workspace_path: String, target_workspace_path: String, relative_path: String) -> Result<ScannedFile, String> {
+fn move_file(
+    source_workspace_path: String,
+    target_workspace_path: String,
+    relative_path: String,
+) -> Result<ScannedFile, String> {
     let source_path = resolve_safe_path(&source_workspace_path, &relative_path)?;
     let target_root = Path::new(&target_workspace_path);
-    
+
     let file_name = source_path.file_name().unwrap_or_default();
     let target_path = target_root.join(file_name);
-    
+
     if !source_path.exists() {
         return Err("Source file does not exist".to_string());
     }
     if target_path.exists() {
         return Err("Target file already exists".to_string());
     }
-    
+
     if let Err(_e) = fs::rename(&source_path, &target_path) {
         // Fallback to copy+remove if crossing mounts
         if let Err(e2) = fs::copy(&source_path, &target_path) {
@@ -286,9 +341,12 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         }
         let _ = fs::remove_file(&source_path);
     }
-    
+
     // Construct the new ScannedFile
-    let ext = target_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = target_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
     let modified_at = match fs::metadata(&target_path).and_then(|m| m.modified()) {
         Ok(sys_time) => {
             let dt: DateTime<Utc> = sys_time.into();
@@ -296,12 +354,12 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
         }
         Err(_) => Utc::now().to_rfc3339(),
     };
-    
+
     let size = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
-    
+
     Ok(ScannedFile {
         id: format!("moved-{}", Utc::now().timestamp_millis()), // ID will be updated on frontend
-        workspace_id: String::new(), // Will be updated on frontend
+        workspace_id: String::new(),                            // Will be updated on frontend
         name: file_name.to_string_lossy().to_string(),
         extension: format!(".{}", ext.to_lowercase()),
         workspace: String::new(), // Will be updated on frontend
@@ -317,31 +375,35 @@ fn move_file(source_workspace_path: String, target_workspace_path: String, relat
 #[tauri::command]
 fn delete_file(workspace_path: String, relative_path: String) -> Result<(), String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
-    
+
     if let Err(e) = fs::remove_file(&file_path) {
         return Err(format!("Failed to delete file: {}", e));
     }
-    
+
     Ok(())
 }
 
 #[tauri::command]
 fn read_file(workspace_path: String, relative_path: String) -> Result<String, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
-    
+
     fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))
 }
 
 #[tauri::command]
-fn create_folder(workspace_path: String, relative_path: String, folder_name: String) -> Result<(), String> {
+fn create_folder(
+    workspace_path: String,
+    relative_path: String,
+    folder_name: String,
+) -> Result<(), String> {
     let root = Path::new(&workspace_path);
     let mut dir_path = root.to_path_buf();
     if !relative_path.is_empty() {
@@ -357,10 +419,14 @@ fn create_folder(workspace_path: String, relative_path: String, folder_name: Str
 }
 
 #[tauri::command]
-fn rename_file(workspace_path: String, relative_path: String, new_name: String) -> Result<ScannedFile, String> {
+fn rename_file(
+    workspace_path: String,
+    relative_path: String,
+    new_name: String,
+) -> Result<ScannedFile, String> {
     let root = Path::new(&workspace_path);
     let source_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     if !source_path.exists() {
         return Err("File does not exist".to_string());
     }
@@ -375,7 +441,10 @@ fn rename_file(workspace_path: String, relative_path: String, new_name: String) 
         return Err(format!("Failed to rename file: {}", e));
     }
 
-    let ext = target_path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let ext = target_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("");
     let modified_at = match fs::metadata(&target_path).and_then(|m| m.modified()) {
         Ok(sys_time) => {
             let dt: DateTime<Utc> = sys_time.into();
@@ -383,10 +452,14 @@ fn rename_file(workspace_path: String, relative_path: String, new_name: String) 
         }
         Err(_) => Utc::now().to_rfc3339(),
     };
-    
+
     let size = fs::metadata(&target_path).map(|m| m.len()).unwrap_or(0);
-    
-    let new_relative_path = target_path.strip_prefix(root).unwrap_or(&target_path).to_string_lossy().to_string();
+
+    let new_relative_path = target_path
+        .strip_prefix(root)
+        .unwrap_or(&target_path)
+        .to_string_lossy()
+        .to_string();
 
     Ok(ScannedFile {
         id: format!("renamed-{}", Utc::now().timestamp_millis()), // ID handled on frontend
@@ -407,11 +480,11 @@ fn rename_file(workspace_path: String, relative_path: String, new_name: String) 
 #[tauri::command]
 fn get_file_modified_time(workspace_path: String, relative_path: String) -> Result<String, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
-    
+
     match fs::metadata(&file_path).and_then(|m| m.modified()) {
         Ok(sys_time) => {
             let dt: DateTime<Utc> = sys_time.into();
@@ -424,12 +497,12 @@ fn get_file_modified_time(workspace_path: String, relative_path: String) -> Resu
 #[tauri::command]
 fn get_absolute_path(workspace_path: String, relative_path: String) -> Result<String, String> {
     let mut file_path = resolve_safe_path(&workspace_path, &relative_path)?;
-    
+
     // Attempt to canonicalize to resolve `.` paths safely
     if let Ok(canonical) = file_path.canonicalize() {
         file_path = canonical;
     }
-    
+
     Ok(file_path.to_string_lossy().to_string())
 }
 
@@ -439,27 +512,27 @@ fn rename_workspace_folder(workspace_path: String, new_name: String) -> Result<S
     if !source_path.exists() {
         return Err("Workspace folder does not exist".to_string());
     }
-    
+
     let target_path = source_path.with_file_name(&new_name);
     if target_path.exists() && source_path != target_path {
         return Err("A folder with the new name already exists".to_string());
     }
-    
+
     if let Err(e) = fs::rename(source_path, &target_path) {
         return Err(format!("Failed to rename workspace folder: {}", e));
     }
-    
+
     Ok(target_path.to_string_lossy().to_string())
 }
 
 #[tauri::command]
 fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> Result<(), String> {
     let mut path = Path::new(&workspace_path).to_path_buf();
-    
+
     if let Some(rel) = relative_path {
         path = path.join(rel);
     }
-    
+
     if !path.exists() {
         return Err("Path does not exist".to_string());
     }
@@ -485,7 +558,11 @@ fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> 
     #[cfg(target_os = "linux")]
     {
         // For linux, there's no standard way to select a file, so we open the parent dir
-        let dir = if path.is_file() { path.parent().unwrap_or(&path) } else { &path };
+        let dir = if path.is_file() {
+            path.parent().unwrap_or(&path)
+        } else {
+            &path
+        };
         std::process::Command::new("xdg-open")
             .arg(dir)
             .spawn()
@@ -500,7 +577,11 @@ fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
     #[cfg(target_os = "windows")]
     {
         std::process::Command::new("powershell")
-            .args(["-NoProfile", "-Command", &format!("Set-Clipboard -Path '{}'", absolute_path.replace("'", "''"))])
+            .args([
+                "-NoProfile",
+                "-Command",
+                &format!("Set-Clipboard -Path '{}'", absolute_path.replace("'", "''")),
+            ])
             .spawn()
             .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
     }
@@ -508,7 +589,13 @@ fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
         std::process::Command::new("osascript")
-            .args(["-e", &format!("set the clipboard to POSIX file \"{}\"", absolute_path.replace("\"", "\\\""))])
+            .args([
+                "-e",
+                &format!(
+                    "set the clipboard to POSIX file \"{}\"",
+                    absolute_path.replace("\"", "\\\"")
+                ),
+            ])
             .spawn()
             .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
     }
@@ -526,14 +613,13 @@ fn force_restart(app_handle: tauri::AppHandle) {
     app_handle.restart();
 }
 
-
 #[tauri::command]
 fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, String> {
     let resource_dir = app_handle.path().resource_dir().unwrap_or_default();
-    
+
     // Start by checking standard dev paths in debug mode to avoid empty placeholder dirs
     let mut source_dir = resource_dir.join("Examples");
-    
+
     #[cfg(debug_assertions)]
     {
         if let Ok(cwd) = std::env::current_dir() {
@@ -557,7 +643,7 @@ fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, 
             source_dir = res_path2;
         }
     }
-    
+
     if source_dir.exists() && source_dir.join("Welcome.md").exists() {
         // Canonicalize to resolve any '..' in the path, which would trigger the anti-traversal security checks
         let resolved_path = std::fs::canonicalize(&source_dir).unwrap_or(source_dir);
@@ -570,7 +656,10 @@ fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, 
         };
         Ok(clean_path)
     } else {
-        Err(format!("Could not find Examples directory. Searched from {:?}", resource_dir))
+        Err(format!(
+            "Could not find Examples directory. Searched from {:?}",
+            resource_dir
+        ))
     }
 }
 
@@ -580,17 +669,30 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
-            scan_directory, create_workspace, create_file, create_folder, rename_file, 
-            save_file, move_file, delete_file, reveal_in_explorer, read_file, 
-            copy_file_to_clipboard, get_file_modified_time, get_absolute_path, 
-            rename_workspace_folder, force_exit, force_restart, open_devtools,
+            scan_directory,
+            create_workspace,
+            create_file,
+            create_folder,
+            rename_file,
+            save_file,
+            move_file,
+            delete_file,
+            reveal_in_explorer,
+            read_file,
+            copy_file_to_clipboard,
+            get_file_modified_time,
+            get_absolute_path,
+            rename_workspace_folder,
+            force_exit,
+            force_restart,
+            open_devtools,
             initialize_example_workspace
         ])
         .setup(|app| {
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
             let restart_i = MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?;
             let exit_i = MenuItem::with_id(app, "exit", "Exit", true, None::<&str>)?;
-            
+
             let menu = Menu::with_items(app, &[&open_i, &restart_i, &exit_i])?;
 
             let mut tray_builder = TrayIconBuilder::new()
@@ -616,7 +718,8 @@ pub fn run() {
                         button: MouseButton::Left,
                         button_state: MouseButtonState::Up,
                         ..
-                    } | TrayIconEvent::DoubleClick { .. } => {
+                    }
+                    | TrayIconEvent::DoubleClick { .. } => {
                         let app = tray.app_handle();
                         if let Some(window) = app.get_webview_window("main") {
                             let _ = window.show();
@@ -671,7 +774,7 @@ mod tests {
         // Mixed LF and CRLF
         let mixed_content = "Line 1\nLine 2\r\nLine 3\n";
         let normalized = normalize_line_endings(mixed_content);
-        
+
         // It should convert all to CRLF
         assert_eq!(normalized, "Line 1\r\nLine 2\r\nLine 3\r\n");
     }
