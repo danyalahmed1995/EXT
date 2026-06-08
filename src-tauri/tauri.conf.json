@@ -25,13 +25,22 @@
       "csp": null,
       "assetProtocol": {
         "enable": true,
-        "scope": ["**"]
+        "scope": [
+          "**"
+        ]
       }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["msi", "nsis", "dmg", "app", "deb", "appimage"],
+    "targets": [
+      "msi",
+      "nsis",
+      "dmg",
+      "app",
+      "deb",
+      "appimage"
+    ],
     "license": "GPL-3.0-or-later",
     "icon": [
       "icons/32x32.png",
@@ -40,6 +49,8 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": ["../Examples"]
+    "resources": [
+      "../Examples"
+    ]
   }
 }
