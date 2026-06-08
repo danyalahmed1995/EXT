@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { listen } from '@tauri-apps/api/event';
+import { safeListen } from '../utils/tauriEvents';
 
 const IDLE_TIMEOUT_MS = 15000; // 15 seconds
 
@@ -41,19 +41,12 @@ export function useIdleState() {
     };
 
     // 2. Tauri Window Focus/Blur Listeners
-    let unlistenFocus: (() => void) | undefined;
-    let unlistenBlur: (() => void) | undefined;
-
-    const setupTauriListeners = async () => {
-      unlistenFocus = await listen('tauri://focus', () => {
-        markActive();
-      });
-      unlistenBlur = await listen('tauri://blur', () => {
-        markIdle();
-      });
-    };
-
-    setupTauriListeners();
+    const unlistenFocus = safeListen('tauri://focus', () => {
+      markActive();
+    });
+    const unlistenBlur = safeListen('tauri://blur', () => {
+      markIdle();
+    });
 
     // 3. User Interaction Listeners
     const activityEvents = ['mousemove', 'keydown', 'mousedown', 'touchstart', 'scroll'];
@@ -72,8 +65,8 @@ export function useIdleState() {
       activityEvents.forEach(event => {
         document.removeEventListener(event, markActive);
       });
-      if (unlistenFocus) unlistenFocus();
-      if (unlistenBlur) unlistenBlur();
+      unlistenFocus();
+      unlistenBlur();
     };
   }, []);
 
