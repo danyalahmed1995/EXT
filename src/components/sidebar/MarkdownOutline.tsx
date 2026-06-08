@@ -12,14 +12,18 @@ interface MarkdownOutlineProps {
   isMarkdown: boolean;
 }
 
-const MAX_OUTLINE_ITEMS = 250;
+const ITEMS_PER_PAGE = 250;
+const MAX_CHUNK_MS = 8;
 
 export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMarkdown }) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
+  const [isScanning, setIsScanning] = useState(false);
+  const [renderLimit, setRenderLimit] = useState(ITEMS_PER_PAGE);
 
   useEffect(() => {
     if (!isMarkdown || !content) {
       setHeadings([]);
+      setIsScanning(false);
       return;
     }
 
@@ -27,91 +31,85 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
     let idleId = 0;
     let debounceId = 0;
 
-    const schedule = (callback: IdleRequestCallback) => {
-      if ('requestIdleCallback' in window) {
-        return window.requestIdleCallback(callback, { timeout: 750 });
-      }
-      return globalThis.setTimeout(() => {
-        callback({ didTimeout: true, timeRemaining: () => 4 } as IdleDeadline);
-      }, 16);
-    };
-
     const cancelScheduled = () => {
-      if (idleId) {
-        if ('cancelIdleCallback' in window) {
-          window.cancelIdleCallback(idleId);
-        } else {
-          globalThis.clearTimeout(idleId);
-        }
-      }
+      if (idleId) globalThis.clearTimeout(idleId);
       if (debounceId) window.clearTimeout(debounceId);
     };
+
+    setIsScanning(true);
+    setHeadings([]);
+    setRenderLimit(ITEMS_PER_PAGE);
 
     debounceId = window.setTimeout(() => {
       let position = 0;
       let lineIndex = 0;
-      let atLineStart = true;
-      const foundHeadings: Heading[] = [];
-      let totalHeadings = 0;
-      let maxChunkMs = 0;
-      const startedAt = performance.now();
+      let allHeadings: Heading[] = [];
 
-      const processChunk: IdleRequestCallback = (_deadline) => {
+      const processChunk = () => {
         const chunkStart = performance.now();
+        let newlyFound: Heading[] = [];
 
-        while (position < content.length && performance.now() - chunkStart < 4) {
-          if (atLineStart && content.charCodeAt(position) === 35) {
-            let cursor = position;
-            while (cursor < content.length && cursor - position < 6 && content.charCodeAt(cursor) === 35) {
-              cursor++;
+        while (performance.now() - chunkStart < MAX_CHUNK_MS) {
+          if (position >= content.length) {
+            if (newlyFound.length > 0) {
+              allHeadings = allHeadings.concat(newlyFound);
+              setHeadings([...allHeadings]);
             }
-            const level = cursor - position;
-            const nextChar = content.charCodeAt(cursor);
-            if (level >= 1 && level <= 6 && (nextChar === 32 || nextChar === 9)) {
-              const maxTitleEnd = Math.min(content.length, cursor + 512);
-              const nextBreak = content.indexOf('\n', cursor + 1);
-              const rawTitleEnd = nextBreak === -1 ? maxTitleEnd : Math.min(nextBreak, maxTitleEnd);
-              const titleEnd = rawTitleEnd > cursor && content.charCodeAt(rawTitleEnd - 1) === 13 ? rawTitleEnd - 1 : rawTitleEnd;
-              const text = content.slice(cursor + 1, titleEnd).trim();
-              if (text) {
-                totalHeadings++;
-                if (foundHeadings.length < MAX_OUTLINE_ITEMS) {
-                  foundHeadings.push({
+            if (!cancelled) {
+              setIsScanning(false);
+            }
+            return;
+          }
+
+          const nextNewline = content.indexOf('\n', position);
+          const endOfLine = nextNewline === -1 ? content.length : nextNewline;
+          
+          let cursor = position;
+          if (position === 0 && content.charCodeAt(0) === 0xFEFF) cursor++;
+          
+          while (cursor < endOfLine && (content.charCodeAt(cursor) === 32 || content.charCodeAt(cursor) === 9)) {
+            cursor++;
+          }
+          
+          const hashStart = cursor;
+          if (content.charCodeAt(cursor) === 35) {
+            while(cursor < endOfLine && content.charCodeAt(cursor) === 35) cursor++;
+            const level = cursor - hashStart;
+            
+            if (level >= 1 && level <= 6 && cursor < endOfLine) {
+              const nextChar = content.charCodeAt(cursor);
+              if (nextChar === 32 || nextChar === 9) {
+                let titleEnd = endOfLine;
+                if (titleEnd > cursor && content.charCodeAt(titleEnd - 1) === 13) titleEnd--;
+                const text = content.slice(cursor + 1, titleEnd).trim();
+                
+                if (text) {
+                  newlyFound.push({
                     level,
                     text,
-                    lineIndex,
+                    lineIndex
                   });
                 }
               }
             }
           }
-
-          atLineStart = false;
-          if (content.charCodeAt(position) === 10) {
-            lineIndex++;
-            atLineStart = true;
-          }
-          position++;
+          
+          position = endOfLine + 1;
+          lineIndex++;
         }
 
-        maxChunkMs = Math.max(maxChunkMs, performance.now() - chunkStart);
         if (cancelled) return;
 
-        if (position >= content.length) {
-          const totalMs = performance.now() - startedAt;
-          if (totalMs > 16 || maxChunkMs > 8) {
-            console.log(
-              `[NavigationPerf] outline generation: total=${totalMs.toFixed(1)}ms maxChunk=${maxChunkMs.toFixed(1)}ms (${lineIndex} lines, ${totalHeadings} headings, rendered=${foundHeadings.length})`,
-            );
-          }
-          setHeadings(foundHeadings);
-        } else {
-          idleId = schedule(processChunk);
+        if (newlyFound.length > 0) {
+          allHeadings = allHeadings.concat(newlyFound);
+          setHeadings([...allHeadings]);
         }
+
+        idleId = globalThis.setTimeout(processChunk, 10);
       };
 
-      idleId = schedule(processChunk);
-    }, 300);
+      idleId = globalThis.setTimeout(processChunk, 0);
+    }, 150);
 
     return () => {
       cancelled = true;
@@ -119,9 +117,16 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
     };
   }, [content, isMarkdown]);
 
-  if (!isMarkdown || headings.length === 0) {
-    return null;
-  }
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollTop + clientHeight >= scrollHeight - 50) {
+      if (renderLimit < headings.length) {
+        setRenderLimit(prev => Math.min(prev + ITEMS_PER_PAGE, headings.length));
+      }
+    }
+  };
+
+  if (!isMarkdown) return null;
 
   const handleHeadingClick = (lineIndex: number) => {
     const event = new CustomEvent('editor-scroll-to-line', {
@@ -130,9 +135,11 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
     window.dispatchEvent(event);
   };
 
+  const visibleHeadings = headings.slice(0, renderLimit);
+
   return (
-    <div className="markdown-outline">
-      {headings.map((h, i) => (
+    <div className="markdown-outline" onScroll={handleScroll}>
+      {visibleHeadings.map((h, i) => (
         <div
           key={`${h.lineIndex}-${i}`}
           className={`markdown-outline-item level-${h.level}`}
@@ -143,6 +150,28 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
           {h.text}
         </div>
       ))}
+      
+      {isScanning && (
+        <div className="markdown-outline-status">
+          <span className="scanning-dot" />
+          Outline indexing… {headings.length} loaded
+        </div>
+      )}
+      {!isScanning && headings.length === 0 && (
+        <div className="markdown-outline-status empty">
+          No headings found
+        </div>
+      )}
+      {!isScanning && headings.length > ITEMS_PER_PAGE && renderLimit < headings.length && (
+        <div className="markdown-outline-status">
+          Scroll to load more...
+        </div>
+      )}
+      {!isScanning && headings.length > 0 && renderLimit >= headings.length && (
+        <div className="markdown-outline-status complete">
+          Outline ready • {headings.length} headings
+        </div>
+      )}
     </div>
   );
 };
