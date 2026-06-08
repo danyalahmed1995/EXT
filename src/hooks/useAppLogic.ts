@@ -7,6 +7,7 @@ import { open, ask } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { openPath } from '@tauri-apps/plugin-opener';
+import { convertLineEndings, detectLineEnding, prepareContentForSave, type ConvertibleLineEnding } from '../utils/lineEndings';
 
 export function useAppLogic() {
 
@@ -53,6 +54,15 @@ export function useAppLogic() {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const readActiveEditorContent = useCallback((tabId: string, fallback: string) => {
+    if (tabId !== activeFileId) return fallback;
+    const event = new CustomEvent<{ content?: string }>('editor-read-active-content', {
+      detail: {},
+    });
+    window.dispatchEvent(event);
+    return event.detail.content ?? fallback;
+  }, [activeFileId]);
 
   // ── Initialization (Load Persistence) ───────────────
 
@@ -155,6 +165,7 @@ export function useAppLogic() {
             content,
             isDirty: false,
             absolutePath: first.absolutePath,
+            lineEnding: detectLineEnding(content),
           }]);
         } else {
           setActiveFileId(null);
@@ -373,6 +384,7 @@ export function useAppLogic() {
             content: '',
             isDirty: false,
             absolutePath: file.absolutePath,
+            lineEnding: 'LF',
             isLoading: true
           },
         ];
@@ -381,7 +393,7 @@ export function useAppLogic() {
       invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
         // Update the tab with the real content and stop loading spinner.
         startTransition(() => {
-          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', isLoading: false } : t));
+          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', lineEnding: detectLineEnding(content || ''), isLoading: false } : t));
         });
       }).catch(() => {
         startTransition(() => {
@@ -430,7 +442,7 @@ export function useAppLogic() {
     if (file && workspace) {
       try {
         const content = await invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath });
-        setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, isDirty: false } : t));
+        setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, lineEnding: detectLineEnding(content), isDirty: false } : t));
         showToast('File reloaded');
       } catch (e) {
         showToast('Failed to reload file');
@@ -672,6 +684,7 @@ export function useAppLogic() {
           isDirty: false,
           saveStatus: 'saved',
           absolutePath: newFile.absolutePath,
+          lineEnding: 'LF',
         },
       ]);
       setActiveFileId(newFile.id);
@@ -827,7 +840,9 @@ export function useAppLogic() {
     const file = files.find((f) => f.id === tabId);
     const workspace = workspaces.find((w) => w.id === file?.workspaceId);
 
-    if (!tab || !file || !workspace || !tab.isDirty) return;
+    if (!tab || !file || !workspace) return;
+    const latestContent = readActiveEditorContent(tab.id, tab.content);
+    if (!tab.isDirty && latestContent === tab.content) return;
 
     setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'saving' } : t)));
 
@@ -835,26 +850,42 @@ export function useAppLogic() {
       const modifiedAt = await invoke('save_file', {
         workspacePath: workspace.path,
         relativePath: file.relativePath,
-        content: tab.content,
+        content: prepareContentForSave(latestContent, tab.lineEnding),
       });
 
       // Update file list modified date
       setFiles((prev) =>
         prev.map((f) =>
-          f.id === file.id ? { ...f, modifiedAt: modifiedAt as string, content: tab.content } : f
+          f.id === file.id ? { ...f, modifiedAt: modifiedAt as string, content: latestContent } : f
         )
       );
 
       // Clear dirty flag
       setOpenTabs((prev) =>
-        prev.map((t) => (t.id === tab.id ? { ...t, isDirty: false, saveStatus: 'saved' } : t))
+        prev.map((t) => (t.id === tab.id ? { ...t, content: latestContent, isDirty: false, saveStatus: 'saved' } : t))
       );
     } catch (err) {
       console.error('Failed to save file:', err);
       setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'error' } : t)));
       showToast(`Failed to save file: ${err}`);
     }
-  }, [openTabs, files, workspaces]);
+  }, [openTabs, files, workspaces, readActiveEditorContent]);
+
+  const handleConvertLineEnding = useCallback((tabId: string, target: ConvertibleLineEnding) => {
+    setOpenTabs((tabs) =>
+      tabs.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        const latestContent = readActiveEditorContent(tab.id, tab.content);
+        return {
+          ...tab,
+          content: convertLineEndings(latestContent, target),
+          lineEnding: target,
+          isDirty: true,
+          saveStatus: 'unsaved',
+        };
+      })
+    );
+  }, [readActiveEditorContent]);
 
   // ── Delete File Handler ─────────────────────────────
 
@@ -1060,24 +1091,57 @@ export function useAppLogic() {
   // ── Keyboard Shortcuts ─────────────────────────────────
 
   useEffect(() => {
+    const focusEditorPane = () => {
+      window.dispatchEvent(new Event('editor-focus-active'));
+    };
+
+    const focusPreviewPane = () => {
+      const preview = document.querySelector<HTMLElement>('.markdown-preview');
+      if (!preview) return;
+      if (!preview.hasAttribute('tabindex')) preview.tabIndex = -1;
+      preview.focus({ preventScroll: true });
+    };
+
+    const selectAdjacentTab = (direction: 1 | -1) => {
+      if (openTabs.length < 2 || !activeFileId) return;
+      const currentIndex = openTabs.findIndex((tab) => tab.id === activeFileId);
+      if (currentIndex === -1) return;
+      const nextIndex = (currentIndex + direction + openTabs.length) % openTabs.length;
+      setActiveFileId(openTabs[nextIndex].id);
+    };
+
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey)) {
-        if (e.key === 's') {
+        const key = e.key.toLowerCase();
+
+        if (key === 's') {
           e.preventDefault();
           if (activeFileId) handleSaveFile(activeFileId);
-        } else if (e.key === 'n' && !e.shiftKey) {
+        } else if (key === 'n' && !e.shiftKey) {
           e.preventDefault();
           setShowNewFileModal(true);
-        } else if (e.key === 'n' && e.shiftKey) {
+        } else if (key === 'n' && e.shiftKey) {
           e.preventDefault();
           // Prompt for folder in currently active workspace (or first workspace if none)
           const wsId = activeView.startsWith('ws-') ? activeView.replace('ws-', '') : workspaces[0]?.id;
           if (wsId) {
             handleCreateFolder(wsId);
           }
-        } else if (e.key === 'p') {
+        } else if (key === 'p') {
           e.preventDefault();
           document.getElementById('global-search-input')?.focus();
+        } else if (key === '1') {
+          e.preventDefault();
+          focusEditorPane();
+        } else if (key === '2') {
+          e.preventDefault();
+          focusPreviewPane();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          selectAdjacentTab(e.shiftKey ? -1 : 1);
+        } else if (key === 'w') {
+          e.preventDefault();
+          if (activeFileId) handleTabClose(activeFileId);
         }
       } else if (e.key === 'F2') {
         if (activeFileId) {
@@ -1106,7 +1170,7 @@ export function useAppLogic() {
     
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeFileId, handleSaveFile, activeView, workspaces, handleCreateFolder]);
+  }, [activeFileId, handleSaveFile, activeView, workspaces, handleCreateFolder, openTabs, handleTabClose]);
 
   // ── External File Change Detection ──────────────────────
 
@@ -1179,7 +1243,7 @@ export function useAppLogic() {
               relativePath: file.relativePath
             });
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, isDirty: false, saveStatus: 'saved' } : t));
+            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent), isDirty: false, saveStatus: 'saved' } : t));
           } else {
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, modifiedAt: diskModifiedTime } : f));
           }
@@ -1189,7 +1253,7 @@ export function useAppLogic() {
             relativePath: file.relativePath
           });
           setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent } : t));
+          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent) } : t));
         }
       }
     } catch (e) {
@@ -1404,6 +1468,7 @@ export function useAppLogic() {
     handleCreateFolder,
     handleMoveFile,
     handleSaveFile,
+    handleConvertLineEnding,
     handleDeleteFile,
     handleCopyFile,
     handleOpenInDefaultApp,
