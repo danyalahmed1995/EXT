@@ -6,6 +6,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { openPath } from '@tauri-apps/plugin-opener';
 
 export function useAppLogic() {
 
@@ -948,6 +949,23 @@ export function useAppLogic() {
     }
   }, [files]);
 
+  // ── Open in Default App Handler ─────────────────────
+
+  const handleOpenInDefaultApp = useCallback(async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file || !file.absolutePath) {
+      showToast('File not found or invalid');
+      return;
+    }
+
+    try {
+      await openPath(file.absolutePath);
+    } catch (err) {
+      console.error('Failed to open file in default app:', err);
+      showToast(`Failed to open file in default app: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [files]);
+
   // ── Context Menus ───────────────────────────────────
 
   useEffect(() => {
@@ -964,6 +982,10 @@ export function useAppLogic() {
             label: 'Save',
             shortcut: 'Ctrl+S',
             onClick: () => handleSaveFile(tabId),
+          },
+          {
+            label: 'Open in Default App',
+            onClick: () => handleOpenInDefaultApp(tabId),
           },
           {
             label: 'Copy',
@@ -996,7 +1018,7 @@ export function useAppLogic() {
 
     window.addEventListener('editor-context-menu', handleEditorContextMenu);
     return () => window.removeEventListener('editor-context-menu', handleEditorContextMenu);
-  }, [handleSaveFile, handleReloadTab, handleClearOtherTabs]);
+  }, [handleSaveFile, handleOpenInDefaultApp, handleReloadTab, handleClearOtherTabs]);
 
   useEffect(() => {
     const handleTabBarContextMenu = (e: Event) => {
@@ -1009,6 +1031,10 @@ export function useAppLogic() {
         x,
         y,
         items: [
+          {
+            label: 'Open in Default App',
+            onClick: () => handleOpenInDefaultApp(targetTabId),
+          },
           {
             label: 'Reload',
             shortcut: '',
@@ -1029,7 +1055,7 @@ export function useAppLogic() {
     };
     window.addEventListener('tab-bar-context-menu', handleTabBarContextMenu);
     return () => window.removeEventListener('tab-bar-context-menu', handleTabBarContextMenu);
-  }, [handleReloadTab, handleClearOtherTabs]);
+  }, [handleOpenInDefaultApp, handleReloadTab, handleClearOtherTabs]);
 
   // ── Keyboard Shortcuts ─────────────────────────────────
 
@@ -1188,6 +1214,7 @@ export function useAppLogic() {
       y: e.clientY,
       items: [
         { label: 'New File', onClick: () => setShowNewFileModal(true), shortcut: 'Ctrl+N' },
+        { label: 'Open in Default App', onClick: () => handleOpenInDefaultApp(fileId) },
         { label: 'Reveal in File Explorer', onClick: async () => {
             const file = files.find(f => f.id === fileId);
             const workspace = workspaces.find(w => w.id === file?.workspaceId);
@@ -1202,7 +1229,7 @@ export function useAppLogic() {
         { label: 'Delete', onClick: () => handleDeleteFile(fileId) },
       ]
     });
-  }, [files, workspaces, handleDeleteFile, handleCopyFile, handleFileSelect, openRenameFileModal]);
+  }, [files, workspaces, handleDeleteFile, handleCopyFile, handleFileSelect, openRenameFileModal, handleOpenInDefaultApp]);
 
   const handleWorkspaceContextMenu = useCallback((e: React.MouseEvent, workspaceId: string) => {
     e.preventDefault();
@@ -1379,6 +1406,7 @@ export function useAppLogic() {
     handleSaveFile,
     handleDeleteFile,
     handleCopyFile,
+    handleOpenInDefaultApp,
     handleWindowFocus,
     handleFileListContextMenu,
     handleWorkspaceContextMenu,
