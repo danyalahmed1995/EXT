@@ -193,6 +193,7 @@ function App() {
             onWorkspaceContextMenu={handleWorkspaceContextMenu}
             activeFileContent={activeFileContent}
             activeFileExtension={activeFileExtension}
+            activeFileId={activeFileId}
             selectedWorkspaces={selectedWorkspaces}
             onToggleWorkspaceSelection={handleToggleWorkspaceSelection}
           />
