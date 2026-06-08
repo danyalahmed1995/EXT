@@ -58,6 +58,7 @@ fn scan_directory(
     path: String,
     workspace_id: String,
     workspace_name: String,
+    ignored_dirs: Vec<String>,
 ) -> Result<ScanResult, String> {
     let mut files = Vec::new();
     let root = Path::new(&path);
@@ -75,26 +76,30 @@ fn scan_directory(
         detected_icon = "python".to_string();
     }
 
-    let ignored_dirs = vec![
-        ".git",
-        "node_modules",
-        "dist",
-        "build",
-        "target",
-        ".next",
-        "out",
-        "coverage",
-        "vendor",
-        "Library",
-        "Temp",
-        "tmp",
-        ".cache",
-        ".turbo",
-        ".venv",
-        "venv",
-        "bin",
-        "obj",
-    ];
+    let dirs: Vec<&str> = if ignored_dirs.is_empty() {
+        vec![
+            ".git",
+            "node_modules",
+            "dist",
+            "build",
+            "target",
+            ".next",
+            "out",
+            "coverage",
+            "vendor",
+            "Library",
+            "Temp",
+            "tmp",
+            ".cache",
+            ".turbo",
+            ".venv",
+            "venv",
+            "bin",
+            "obj",
+        ]
+    } else {
+        ignored_dirs.iter().map(|s| s.as_str()).collect()
+    };
 
     let walker = WalkDir::new(root).into_iter().filter_entry(|e| {
         let is_hidden = e
@@ -105,7 +110,7 @@ fn scan_directory(
         let is_ignored = e
             .file_name()
             .to_str()
-            .map(|s| ignored_dirs.contains(&s))
+            .map(|s| dirs.contains(&s))
             .unwrap_or(false);
         // Exclude ignored dirs entirely, and normally we might exclude hidden dirs but .github etc might be useful.
         // Let's just exclude our hardcoded ignored dirs.

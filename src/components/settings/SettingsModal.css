@@ -1,101 +1,246 @@
 .settings-modal {
-  max-width: 500px;
-  width: 90%;
+	background: var(--color-surface-elevated);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-elevated);
+	max-width: 500px;
+	width: 90%;
+	animation: modal-slide-in 200ms ease;
+}
+
+@keyframes modal-slide-in {
+	from {
+		transform: translateY(-12px);
+		opacity: 0;
+	}
+	to {
+		transform: translateY(0);
+		opacity: 1;
+	}
+}
+
+.settings-modal .modal-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 16px 20px 0 20px;
+}
+
+.settings-modal .modal-header h2 {
+	margin: 0;
+	font-size: var(--font-size-xl);
+	color: var(--color-text-primary);
+}
+
+.settings-modal .modal-body {
+	padding: 16px 20px 20px 20px;
+}
+
+.settings-modal .icon-btn {
+	background: transparent;
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	color: var(--color-text-muted);
+	width: 32px;
+	height: 32px;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	cursor: pointer;
+	font-size: 16px;
+	transition: all var(--transition-fast);
+}
+
+.settings-modal .icon-btn:hover {
+	color: var(--color-text-primary);
+	border-color: var(--color-text-muted);
+}
+
+.settings-modal .btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	height: 32px;
+	padding: 0 var(--space-lg);
+	border-radius: var(--radius-pill);
+	font-family: var(--font-ui);
+	font-size: var(--font-size-sm);
+	font-weight: var(--font-weight-medium);
+	line-height: 1;
+	cursor: pointer;
+	transition: all var(--transition-fast);
+	border: none;
 }
 
 .settings-section {
-  margin-bottom: 24px;
+	margin-bottom: 24px;
 }
 
 .settings-section h3 {
-  margin: 0 0 8px 0;
-  font-size: var(--font-size-lg);
-  color: var(--color-text-primary);
+	margin: 0 0 8px 0;
+	font-size: var(--font-size-lg);
+	color: var(--color-text-primary);
 }
 
 .settings-desc {
-  margin: 0 0 12px 0;
-  color: var(--color-text-muted);
-  font-size: var(--font-size-sm);
-  line-height: 1.5;
+	margin: 0 0 12px 0;
+	color: var(--color-text-muted);
+	font-size: var(--font-size-sm);
+	line-height: 1.5;
 }
 
 .settings-toggles {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: var(--color-surface);
-  padding: 16px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--color-border);
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+	background: var(--color-surface);
+	padding: 16px;
+	border-radius: var(--radius-md);
+	border: 1px solid var(--color-border);
 }
 
 .settings-toggle {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  cursor: pointer;
-  user-select: none;
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	cursor: pointer;
+	user-select: none;
 }
 
 .settings-toggle input[type="checkbox"] {
-  width: 16px;
-  height: 16px;
-  accent-color: var(--color-accent);
-  cursor: pointer;
+	width: 16px;
+	height: 16px;
+	accent-color: var(--color-accent);
+	cursor: pointer;
 }
 
 .toggle-label {
-  color: var(--color-text-primary);
-  font-size: var(--font-size-sm);
+	color: var(--color-text-primary);
+	font-size: var(--font-size-sm);
+}
+
+.ignored-dirs-input-row {
+	display: flex;
+	gap: 8px;
+	margin-bottom: 12px;
+}
+
+.ignored-dirs-input {
+	flex: 1;
+	height: 32px;
+	padding: 0 var(--space-md);
+	background: var(--color-surface);
+	border: 1px solid var(--color-border);
+	border-radius: var(--radius-md);
+	color: var(--color-text-primary);
+	font-family: var(--font-ui);
+	font-size: var(--font-size-sm);
+	outline: none;
+	transition: border-color var(--transition-fast);
+}
+
+.ignored-dirs-input:focus {
+	border-color: var(--color-accent);
+}
+
+.ignored-dirs-input::placeholder {
+	color: var(--color-text-muted);
+}
+
+.settings-modal .btn-add-dir {
+	height: 32px;
+	padding: 0 12px;
+	background: var(--color-accent);
+	color: #fff;
+	font-size: var(--font-size-sm);
+	font-weight: var(--font-weight-medium);
+	border-radius: var(--radius-md);
+	white-space: nowrap;
+	flex-shrink: 0;
+}
+
+.settings-modal .btn-add-dir:hover {
+	background: var(--color-accent-hover);
+}
+
+.settings-modal .btn-add-dir:disabled {
+	opacity: 0.4;
+	cursor: not-allowed;
 }
 
 .ignored-dirs-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
 }
 
 .ignored-dir-badge {
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--color-border);
-  color: var(--color-text-secondary);
-  padding: 4px 8px;
-  border-radius: var(--radius-sm);
-  font-family: var(--font-mono);
-  font-size: 12px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: rgba(255, 255, 255, 0.05);
+	border: 1px solid var(--color-border);
+	color: var(--color-text-secondary);
+	padding: 4px 8px;
+	border-radius: var(--radius-sm);
+	font-family: var(--font-mono);
+	font-size: 12px;
+}
+
+.ignored-dir-remove {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	padding: 0;
+	background: transparent;
+	border: none;
+	color: var(--color-text-muted);
+	cursor: pointer;
+	font-size: 10px;
+	line-height: 1;
+	border-radius: 50%;
+	transition: all var(--transition-fast);
+}
+
+.ignored-dir-remove:hover {
+	background: var(--color-error);
+	color: #fff;
 }
 
 .danger-zone h3 {
-  color: var(--color-error);
+	color: var(--color-error);
 }
 
 .danger-action {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(245, 84, 106, 0.05);
-  border: 1px solid rgba(245, 84, 106, 0.2);
-  padding: 16px;
-  border-radius: var(--radius-md);
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	background: rgba(245, 84, 106, 0.05);
+	border: 1px solid rgba(245, 84, 106, 0.2);
+	padding: 16px;
+	border-radius: var(--radius-md);
 }
 
 .danger-action h4 {
-  margin: 0 0 4px 0;
-  color: var(--color-text-primary);
+	margin: 0 0 4px 0;
+	color: var(--color-text-primary);
 }
 
 .danger-action .settings-desc {
-  margin: 0;
+	margin: 0;
 }
 
-.btn-danger {
-  background: var(--color-error);
-  color: #fff;
-  border: none;
-  font-weight: bold;
+.settings-modal .btn-danger {
+	background: var(--color-error);
+	color: #fff;
+	font-weight: bold;
+	flex-shrink: 0;
+	white-space: nowrap;
+	margin-left: 16px;
 }
 
-.btn-danger:hover {
-  background: #ff6b80;
+.settings-modal .btn-danger:hover {
+	background: #ff6b80;
 }
