@@ -4,10 +4,10 @@ import { ContextMenuItem } from '../components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
-import { listen } from '@tauri-apps/api/event';
 import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { openPath } from '@tauri-apps/plugin-opener';
 import { convertLineEndings, detectLineEnding, prepareContentForSave, type ConvertibleLineEnding } from '../utils/lineEndings';
+import { safeListen } from '../utils/tauriEvents';
 
 export function useAppLogic() {
 
@@ -571,24 +571,23 @@ export function useAppLogic() {
   }, []);
 
   useEffect(() => {
-    const unlistens: (() => void)[] = [];
-    
-    listen('tauri://drag-drop', (event: any) => {
+    const unlistenDragDrop = safeListen<any>('tauri://drag-drop', (event) => {
       const paths = event.payload?.paths;
       if (Array.isArray(paths)) {
         paths.forEach(p => handleAddFolderByPath(p));
       }
-    }).then(u => unlistens.push(u));
-    
-    listen('tauri://file-drop', (event: any) => {
+    });
+
+    const unlistenFileDrop = safeListen<any>('tauri://file-drop', (event) => {
       const paths = event.payload;
       if (Array.isArray(paths)) {
         paths.forEach(p => handleAddFolderByPath(p));
       }
-    }).then(u => unlistens.push(u));
+    });
 
     return () => {
-      unlistens.forEach(u => u());
+      unlistenDragDrop();
+      unlistenFileDrop();
     };
   }, [handleAddFolderByPath]);
 
@@ -1263,8 +1262,7 @@ export function useAppLogic() {
   }, [activeFileId, files, openTabs, workspaces, handleTabClose]);
 
   useEffect(() => {
-    const unlisten = listen('tauri://focus', handleWindowFocus);
-    return () => { unlisten.then(u => u()); };
+    return safeListen('tauri://focus', handleWindowFocus);
   }, [handleWindowFocus]);
 
   const handleFileListContextMenu = useCallback((e: React.MouseEvent, fileId?: string) => {
@@ -1382,9 +1380,7 @@ export function useAppLogic() {
   // ── Tray Integration ────────────────────────────────────
 
   useEffect(() => {
-    const unlistens: (() => void)[] = [];
-
-    listen('tray-exit-requested', async () => {
+    const unlistenExit = safeListen('tray-exit-requested', async () => {
       const hasDirty = openTabs.some((t) => t.isDirty);
       if (hasDirty) {
         const confirmed = await ask('You have unsaved changes. Exiting may discard them. Continue?', {
@@ -1397,9 +1393,9 @@ export function useAppLogic() {
       }
       console.log('App quit allowed');
       invoke('force_exit');
-    }).then(u => unlistens.push(u));
+    });
 
-    listen('tray-restart-requested', async () => {
+    const unlistenRestart = safeListen('tray-restart-requested', async () => {
       const hasDirty = openTabs.some((t) => t.isDirty);
       if (hasDirty) {
         const confirmed = await ask('You have unsaved changes. Restarting may discard them. Continue?', {
@@ -1412,10 +1408,11 @@ export function useAppLogic() {
       }
       console.log('App restart allowed');
       invoke('force_restart');
-    }).then(u => unlistens.push(u));
+    });
 
     return () => {
-      unlistens.forEach(u => u());
+      unlistenExit();
+      unlistenRestart();
     };
   }, [openTabs]);
 

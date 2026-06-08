@@ -173,13 +173,17 @@
   gap: var(--space-sm);
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
+  min-width: 0;
+  width: 100%;
 }
 
 .file-list-item-workspace {
+  flex: 1;
+  min-width: 0;
+  max-width: none;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 120px;
 }
 
 .file-list-item-ext {
