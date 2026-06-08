@@ -139,7 +139,7 @@ const ChunkComponent = React.memo(({ chunk, blockObserver, previewInstanceId }: 
         blocks.forEach(b => blockObserver.unobserve(b));
       };
     }
-  }, [isVisible, blockObserver]);
+  }, [isVisible, blockObserver, chunk.blocks]);
 
   if (!isVisible) {
     return <div ref={ref} data-chunk-id={`${previewInstanceId}-${chunk.id}`} style={{ minHeight: chunk.estimatedHeight }} className="preview-chunk preview-chunk--placeholder" />;
@@ -188,6 +188,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   const [hasStartedRender, setHasStartedRender] = useState(!isHeavy);
   const [isFastScrolling, setIsFastScrolling] = useState(false);
   const [isEditorFocused, setIsEditorFocused] = useState(false);
+  const [uiPaused, setUiPaused] = useState(false);
   const [pendingCount, setPendingCount] = useState(0);
   const [cachedCount, setCachedCount] = useState(0);
 
@@ -390,7 +391,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   }, [pumpWorkerQueue, previewInstanceId]);
 
   const evaluateVisibleBlocks = useCallback(() => {
-    if (!isMountedRef.current || !isActiveRef.current || isEditorFocusedRef.current) return; // Strict safety: do not pull new blocks while editor focused
+    if (!isMountedRef.current || !isActiveRef.current) return;
     visibleBlocksRef.current.forEach(id => {
       requestBlock(id);
     });
@@ -406,7 +407,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
       return;
     }
     
-    if (isUserActiveRef.current || isFastScrollingRef.current || isEditorFocusedRef.current) {
+    if (isUserActiveRef.current || isFastScrollingRef.current) {
       isPurifyingRef.current = false;
       return; // Paused.
     }
@@ -422,7 +423,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
       let blocksProcessed = 0;
       
       while (purifyQueueRef.current.length > 0) {
-        if (!isMountedRef.current || !isActiveRef.current || isUserActiveRef.current || isFastScrollingRef.current || isEditorFocusedRef.current) break; // Pause instantly on input
+        if (!isMountedRef.current || !isActiveRef.current || isUserActiveRef.current || isFastScrollingRef.current) break; // Pause instantly on input
         if (blocksProcessed > 0 && deadline.timeRemaining() < 5) break;   // Yield if frame budget is low
         
         const { blockId, html } = purifyQueueRef.current.shift()!;
@@ -451,7 +452,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
         return;
       }
       
-      if (purifyQueueRef.current.length > 0 && !(isUserActiveRef.current || isFastScrollingRef.current || isEditorFocusedRef.current)) {
+      if (purifyQueueRef.current.length > 0 && !(isUserActiveRef.current || isFastScrollingRef.current)) {
         processPurifyQueue(); // Yield to next frame
       } else {
         isPurifyingRef.current = false;
@@ -476,14 +477,22 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
 
     const onActivity = () => {
       if (!isMountedRef.current) return;
-      isUserActiveRef.current = true;
+      if (!isUserActiveRef.current) {
+        isUserActiveRef.current = true;
+        setUiPaused(true);
+      }
       if (activityTimerRef.current) window.clearTimeout(activityTimerRef.current);
       activityTimerRef.current = window.setTimeout(() => {
         if (!isMountedRef.current) return;
         isUserActiveRef.current = false;
+        setUiPaused(false);
         checkFocus(); // update focus state after activity settles
-        if (!isPurifyingRef.current && purifyQueueRef.current.length > 0 && !isEditorFocusedRef.current) {
+        if (!isPurifyingRef.current && purifyQueueRef.current.length > 0) {
           processPurifyQueue();
+        }
+        if (!isFastScrollingRef.current) {
+          evaluateVisibleBlocks();
+          pumpWorkerQueue();
         }
       }, USER_ACTIVITY_PAUSE_MS);
     };
@@ -509,17 +518,17 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
     };
   }, [processPurifyQueue]);
 
-  // Restart processing if focus leaves editor or tab becomes active
+  // Restart processing if tab becomes active
   useEffect(() => {
     if (!isMountedRef.current) return;
-    if (isActive && !isEditorFocused && !isPurifyingRef.current && purifyQueueRef.current.length > 0) {
+    if (isActive && !isPurifyingRef.current && purifyQueueRef.current.length > 0) {
       processPurifyQueue();
     }
-    if (isActive && !isEditorFocused && !isFastScrolling) {
+    if (isActive && !isFastScrolling) {
       evaluateVisibleBlocks();
       pumpWorkerQueue();
     }
-  }, [isActive, isEditorFocused, processPurifyQueue, evaluateVisibleBlocks, pumpWorkerQueue, isFastScrolling]);
+  }, [isActive, processPurifyQueue, evaluateVisibleBlocks, pumpWorkerQueue, isFastScrolling]);
 
   /* ── Lifecycle & Workers ─────────────────────── */
   const onMessageRef = useRef<((e: MessageEvent) => void) | null>(null);
@@ -673,11 +682,8 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   } else if (!hasStartedRender) {
     statusText = 'Preview paused for large document';
     statusClass += ' paused';
-  } else if (isEditorFocused) {
-    statusText = 'Paused while editor is active...';
-    statusClass += ' paused';
-  } else if (isFastScrolling || isUserActiveRef.current) {
-    statusText = isUserActiveRef.current ? 'Paused for input...' : 'Catching up after scroll...';
+  } else if (isFastScrolling || uiPaused) {
+    statusText = uiPaused ? 'Paused for input...' : 'Catching up after scroll...';
     statusClass += ' paused';
   } else if (pendingCount > 0 || purifyQueueRef.current.length > 0) {
     statusText = `Rendering • ${pendingCount + purifyQueueRef.current.length} queued`;
