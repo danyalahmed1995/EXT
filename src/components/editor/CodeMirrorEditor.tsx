@@ -1,6 +1,7 @@
-import React, { useEffect, useRef, useMemo } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { EditorView, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
+import type { ChangeSet, Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
@@ -11,8 +12,8 @@ import { extEditorTheme, extHighlightStyle } from '../../styles/editor-theme';
 interface CodeMirrorEditorProps {
   activeTabId: string;
   content: string;
-  onChange?: (content: string) => void;
-  onSave?: () => void;
+  onChange?: (tabId: string, content: string) => void;
+  onSave?: (tabId: string) => void;
   isActive?: boolean;
 }
 
@@ -20,9 +21,36 @@ interface CachedState {
   state: EditorState;
   scrollTop: number;
   scrollLeft: number;
+  contentLength: number;
 }
 
-const MAX_CACHED_STATES = 15;
+const MAX_CACHED_STATES = 6;
+const LARGE_DOC_THRESHOLD = 250_000;
+
+function isLargeDocument(contentLength: number): boolean {
+  return contentLength >= LARGE_DOC_THRESHOLD;
+}
+
+function recordNavTiming(key: string, elapsed: number): void {
+  const navPerf = (window as any).__NAV_PERF;
+  if (navPerf) {
+    navPerf[key] = Math.max(navPerf[key] || 0, elapsed);
+  }
+}
+
+function applyChangesToString(content: string, changes: ChangeSet): string {
+  let next = '';
+  let position = 0;
+
+  changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    next += content.slice(position, fromA);
+    next += inserted.toString();
+    position = toA;
+  });
+
+  next += content.slice(position);
+  return next;
+}
 
 export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   activeTabId,
@@ -34,141 +62,260 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const stateCache = useRef<Map<string, CachedState>>(new Map());
+  const contentCache = useRef<Map<string, string>>(new Map());
+  const pendingChangeTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const prevTabId = useRef<string | null>(null);
-  
-  // Use refs for callbacks to avoid stale closures inside CodeMirror setup
+  const activeTabIdRef = useRef(activeTabId);
   const onChangeRef = useRef(onChange);
   const onSaveRef = useRef(onSave);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    activeTabIdRef.current = activeTabId;
     onChangeRef.current = onChange;
     onSaveRef.current = onSave;
-  }, [onChange, onSave]);
+  }, [activeTabId, onChange, onSave]);
 
-  const extensions = useMemo(() => [
-    lineNumbers(),
-    highlightActiveLine(),
-    highlightSpecialChars(),
-    drawSelection(),
-    indentOnInput(),
-    bracketMatching(),
-    foldGutter(),
-    highlightSelectionMatches(),
-    search({ top: true }),
-    history(),
-    keymap.of([
-      ...defaultKeymap, 
-      ...historyKeymap, 
-      ...searchKeymap,
-      {
-        key: 'Mod-s',
-        preventDefault: true,
-        run: (view) => {
-          if (timeoutRef.current) clearTimeout(timeoutRef.current);
-          if (onChangeRef.current) onChangeRef.current(view.state.doc.toString());
-          if (onSaveRef.current) onSaveRef.current();
-          return true;
+  const clearPendingChange = useCallback((tabId: string) => {
+    const timer = pendingChangeTimers.current.get(tabId);
+    if (timer) {
+      clearTimeout(timer);
+      pendingChangeTimers.current.delete(tabId);
+    }
+  }, []);
+
+  const scheduleChange = useCallback((tabId: string, nextContent: string) => {
+    clearPendingChange(tabId);
+    const timer = setTimeout(() => {
+      pendingChangeTimers.current.delete(tabId);
+      onChangeRef.current?.(tabId, nextContent);
+    }, 300);
+    pendingChangeTimers.current.set(tabId, timer);
+  }, [clearPendingChange]);
+
+  const createExtensions = useCallback((tabId: string, contentLength: number): Extension[] => {
+    const large = isLargeDocument(contentLength);
+    const extensions: Extension[] = [
+      lineNumbers(),
+      highlightActiveLine(),
+      highlightSpecialChars(),
+      drawSelection(),
+      search({ top: true }),
+      history(),
+      keymap.of([
+        ...defaultKeymap,
+        ...historyKeymap,
+        ...searchKeymap,
+        {
+          key: 'Mod-s',
+          preventDefault: true,
+          run: () => {
+            clearPendingChange(tabId);
+            const latestContent = contentCache.current.get(tabId);
+            if (latestContent != null) {
+              onChangeRef.current?.(tabId, latestContent);
+            }
+            onSaveRef.current?.(tabId);
+            return true;
+          },
+        },
+      ]),
+      extEditorTheme,
+      extHighlightStyle,
+      EditorView.contentAttributes.of({ spellcheck: large ? 'false' : 'true' }),
+      EditorView.updateListener.of((update) => {
+        if (!update.docChanged) return;
+
+        const oldContent = contentCache.current.get(tabId) ?? '';
+        const t0 = performance.now();
+        const nextContent = applyChangesToString(oldContent, update.changes);
+        const elapsed = performance.now() - t0;
+        contentCache.current.set(tabId, nextContent);
+        scheduleChange(tabId, nextContent);
+
+        recordNavTiming('cmChangeApply', elapsed);
+        if (elapsed > 16) {
+          console.warn(`[NavigationPerf] CodeMirror change apply: ${elapsed.toFixed(1)}ms (${(nextContent.length / 1024).toFixed(0)}KB)`);
         }
-      }
-    ]),
-    markdown({ codeLanguages: languages }),
-    extEditorTheme,
-    extHighlightStyle,
-    EditorView.lineWrapping,
-    EditorView.contentAttributes.of({ spellcheck: "true" }),
-    EditorView.updateListener.of((update) => {
-      if (update.docChanged && onChangeRef.current) {
-        const newContent = update.state.doc.toString();
-        if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        timeoutRef.current = setTimeout(() => {
-          if (onChangeRef.current) onChangeRef.current(newContent);
-        }, 300);
-      }
-    }),
-  ], []);
+      }),
+    ];
 
-  // Initialize EditorView exactly once
+    if (!large) {
+      extensions.splice(
+        8,
+        0,
+        indentOnInput(),
+        bracketMatching(),
+        foldGutter(),
+        highlightSelectionMatches(),
+        markdown({ codeLanguages: languages }),
+        EditorView.lineWrapping,
+      );
+    } else {
+      extensions.splice(8, 0, bracketMatching(), highlightSelectionMatches());
+    }
+
+    return extensions;
+  }, [clearPendingChange, scheduleChange]);
+
+  const createEditorState = useCallback((tabId: string, doc: string) => {
+    const large = isLargeDocument(doc.length);
+    const t0 = performance.now();
+    const state = EditorState.create({
+      doc,
+      extensions: createExtensions(tabId, doc.length),
+    });
+    const elapsed = performance.now() - t0;
+
+    recordNavTiming('cmStateCreate', elapsed);
+    if (elapsed > 16) {
+      console.warn(
+        `[NavigationPerf] CodeMirror state create: ${elapsed.toFixed(1)}ms mode=${large ? 'plain-large' : 'markdown'} size=${(doc.length / 1024).toFixed(0)}KB`,
+      );
+    }
+
+    contentCache.current.set(tabId, doc);
+    return state;
+  }, [createExtensions]);
+
+  const enforceCacheLimit = useCallback((protectedTabId: string) => {
+    while (stateCache.current.size > MAX_CACHED_STATES) {
+      const firstKey = stateCache.current.keys().next().value as string | undefined;
+      if (!firstKey) return;
+      if (firstKey === protectedTabId) {
+        const protectedEntry = stateCache.current.get(firstKey);
+        stateCache.current.delete(firstKey);
+        if (protectedEntry) stateCache.current.set(firstKey, protectedEntry);
+        continue;
+      }
+      stateCache.current.delete(firstKey);
+      contentCache.current.delete(firstKey);
+      clearPendingChange(firstKey);
+    }
+  }, [clearPendingChange]);
+
   useEffect(() => {
     if (!containerRef.current) return;
 
+    const initialState = createEditorState(activeTabId, content);
+    const t0 = performance.now();
     const view = new EditorView({
+      state: initialState,
       parent: containerRef.current,
     });
+    const mountElapsed = performance.now() - t0;
+    recordNavTiming('cmViewMount', mountElapsed);
+    if (mountElapsed > 16) {
+      console.warn(`[NavigationPerf] CodeMirror view mount: ${mountElapsed.toFixed(1)}ms`);
+    }
 
     viewRef.current = view;
+    prevTabId.current = activeTabId;
+    stateCache.current.set(activeTabId, {
+      state: initialState,
+      scrollTop: 0,
+      scrollLeft: 0,
+      contentLength: content.length,
+    });
+
+    requestAnimationFrame(() => {
+      if (activeTabIdRef.current === activeTabId) {
+        console.log('[NavigationPerf] editor usable: initial paint');
+      }
+    });
 
     return () => {
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      for (const timer of pendingChangeTimers.current.values()) clearTimeout(timer);
+      pendingChangeTimers.current.clear();
       view.destroy();
+      viewRef.current = null;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle Tab Switching and Content Updates
   useEffect(() => {
-    if (!viewRef.current) return;
     const view = viewRef.current;
+    if (!view) return;
 
-    if (prevTabId.current && prevTabId.current !== activeTabId) {
-      const prevId = prevTabId.current;
-      stateCache.current.set(prevId, {
+    const previousTabId = prevTabId.current;
+    if (previousTabId && previousTabId !== activeTabId) {
+      stateCache.current.set(previousTabId, {
         state: view.state,
         scrollTop: view.scrollDOM.scrollTop,
-        scrollLeft: view.scrollDOM.scrollLeft
+        scrollLeft: view.scrollDOM.scrollLeft,
+        contentLength: contentCache.current.get(previousTabId)?.length ?? view.state.doc.length,
+      });
+      enforceCacheLimit(activeTabId);
+    }
+
+    if (previousTabId !== activeTabId) {
+      const cached = stateCache.current.get(activeTabId);
+      const cachedContent = contentCache.current.get(activeTabId);
+      const hasPendingLocalChange = pendingChangeTimers.current.has(activeTabId);
+      let nextState = cached?.state;
+      let scrollTop = cached?.scrollTop ?? 0;
+      let scrollLeft = cached?.scrollLeft ?? 0;
+
+      if (!nextState || (!hasPendingLocalChange && cachedContent !== undefined && cachedContent !== content)) {
+        nextState = createEditorState(activeTabId, content);
+        scrollTop = 0;
+        scrollLeft = 0;
+      } else if (!nextState) {
+        nextState = createEditorState(activeTabId, cachedContent ?? content);
+      }
+
+      const setStateStart = performance.now();
+      view.setState(nextState);
+      const setStateElapsed = performance.now() - setStateStart;
+      recordNavTiming('cmSetState', setStateElapsed);
+      if (setStateElapsed > 16) {
+        console.warn(`[NavigationPerf] CodeMirror setState: ${setStateElapsed.toFixed(1)}ms cached=${Boolean(cached)}`);
+      }
+
+      stateCache.current.delete(activeTabId);
+      stateCache.current.set(activeTabId, {
+        state: nextState,
+        scrollTop,
+        scrollLeft,
+        contentLength: contentCache.current.get(activeTabId)?.length ?? content.length,
+      });
+      enforceCacheLimit(activeTabId);
+
+      requestAnimationFrame(() => {
+        if (activeTabIdRef.current !== activeTabId) return;
+        view.scrollDOM.scrollTop = scrollTop;
+        view.scrollDOM.scrollLeft = scrollLeft;
+        console.log(`[NavigationPerf] editor usable: ${activeTabId.slice(0, 16)}`);
+      });
+
+      prevTabId.current = activeTabId;
+      return;
+    }
+
+    const cachedContent = contentCache.current.get(activeTabId);
+    const hasPendingLocalChange = pendingChangeTimers.current.has(activeTabId);
+    if (!hasPendingLocalChange && cachedContent !== content && !view.hasFocus) {
+      const nextState = createEditorState(activeTabId, content);
+      const setStateStart = performance.now();
+      view.setState(nextState);
+      const setStateElapsed = performance.now() - setStateStart;
+      recordNavTiming('cmSetState', setStateElapsed);
+      if (setStateElapsed > 16) {
+        console.warn(`[NavigationPerf] CodeMirror external content setState: ${setStateElapsed.toFixed(1)}ms`);
+      }
+      stateCache.current.set(activeTabId, {
+        state: nextState,
+        scrollTop: view.scrollDOM.scrollTop,
+        scrollLeft: view.scrollDOM.scrollLeft,
+        contentLength: content.length,
       });
     }
+  }, [activeTabId, content, createEditorState, enforceCacheLimit]);
 
-    // 2. Handle active tab
-    if (prevTabId.current !== activeTabId) {
-      let cached = stateCache.current.get(activeTabId);
-      if (cached) {
-        // LRU bump
-        stateCache.current.delete(activeTabId);
-        stateCache.current.set(activeTabId, cached);
-        
-        view.setState(cached.state);
-        
-        // Restore scroll after paint
-        requestAnimationFrame(() => {
-          view.scrollDOM.scrollTop = cached.scrollTop;
-          view.scrollDOM.scrollLeft = cached.scrollLeft;
-        });
-      } else {
-        // Cold mount
-        const newState = EditorState.create({
-          doc: content,
-          extensions
-        });
-        view.setState(newState);
-        stateCache.current.set(activeTabId, { state: newState, scrollTop: 0, scrollLeft: 0 });
-        
-        if (stateCache.current.size > MAX_CACHED_STATES) {
-          const firstKey = stateCache.current.keys().next().value;
-          if (firstKey !== undefined) {
-            stateCache.current.delete(firstKey);
-          }
-        }
-      }
-      prevTabId.current = activeTabId;
-    } else {
-      // Same tab, handle external content changes (e.g., file reload)
-      if (view.state.doc.toString() !== content) {
-        const newState = EditorState.create({
-          doc: content,
-          extensions
-        });
-        view.setState(newState);
-      }
-    }
-  }, [activeTabId, content, extensions]);
-
-  // Handle external commands
   useEffect(() => {
     const handleCopy = () => {
       if (viewRef.current && isActive) {
         const selection = viewRef.current.state.sliceDoc(
           viewRef.current.state.selection.main.from,
-          viewRef.current.state.selection.main.to
+          viewRef.current.state.selection.main.to,
         );
         if (selection) {
           navigator.clipboard.writeText(selection);
@@ -181,8 +328,8 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
           changes: {
             from: viewRef.current.state.selection.main.from,
             to: viewRef.current.state.selection.main.to,
-            insert: ''
-          }
+            insert: '',
+          },
         });
       }
     };
@@ -195,6 +342,14 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   }, [isActive]);
 
   useEffect(() => {
+    if (!isActive) return;
+    const rafId = requestAnimationFrame(() => {
+      viewRef.current?.requestMeasure();
+    });
+    return () => cancelAnimationFrame(rafId);
+  }, [isActive]);
+
+  useEffect(() => {
     const handleScrollToLine = (e: Event) => {
       const customEvent = e as CustomEvent;
       const { lineIndex } = customEvent.detail;
@@ -202,10 +357,10 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         const view = viewRef.current;
         const targetLine = Math.min(Math.max(1, lineIndex + 1), view.state.doc.lines);
         const lineInfo = view.state.doc.line(targetLine);
-        
+
         view.dispatch({
           selection: { anchor: lineInfo.from, head: lineInfo.from },
-          effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' })
+          effects: EditorView.scrollIntoView(lineInfo.from, { y: 'center' }),
         });
         view.focus();
       }

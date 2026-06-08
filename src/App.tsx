@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { FileList } from './components/file-list/FileList';
@@ -72,6 +72,11 @@ function App() {
   handleDragEnd
 } = useAppLogic();
 
+  // Memoize active file content/extension for Sidebar to prevent re-renders
+  const activeTabMemo = useMemo(() => openTabs.find(t => t.id === activeFileId), [openTabs, activeFileId]);
+  const activeFileContent = activeTabMemo?.content;
+  const activeFileExtension = activeTabMemo?.extension;
+
   // ── Run Profile Automation ────────────────────────
   const runProfile = async () => {
     if (openTabs.length < 2) {
@@ -84,8 +89,37 @@ function App() {
     let log = "=== NAVIGATION PROFILE ===\n";
     let maxDelay = 0;
     let over50Count = 0;
+    let over200Count = 0;
+    const longTasks: { duration: number; when: string }[] = [];
 
-    for (let i = 0; i < 20; i++) {
+    // Track long tasks via PerformanceObserver
+    let longTaskObserver: PerformanceObserver | null = null;
+    try {
+      longTaskObserver = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longTasks.push({ duration: Math.round(entry.duration), when: `t+${Math.round(entry.startTime)}ms` });
+        }
+      });
+      longTaskObserver.observe({ entryTypes: ['longtask'] });
+    } catch {
+      // PerformanceObserver for longtask not supported
+    }
+
+    // Track max frame delay  
+    let frameMaxDelay = 0;
+    let lastFrameTime = performance.now();
+    let frameRafId = 0;
+    const frameLoop = () => {
+      const now = performance.now();
+      const delta = now - lastFrameTime;
+      if (delta > frameMaxDelay) frameMaxDelay = delta;
+      lastFrameTime = now;
+      frameRafId = requestAnimationFrame(frameLoop);
+    };
+    frameRafId = requestAnimationFrame(frameLoop);
+
+    const iterations = Math.min(50, openTabs.length * 10);
+    for (let i = 0; i < iterations; i++) {
       const fileId = openTabs[i % openTabs.length].id;
       const start = performance.now();
       
@@ -101,14 +135,30 @@ function App() {
       maxDelay = Math.max(maxDelay, delay);
       
       if (delay > 50) over50Count++;
-      log += `Switch ${i + 1} to ${fileId.substring(0, 8)}: ${delay.toFixed(2)}ms\n`;
+      if (delay > 200) over200Count++;
+      if (i < 20) {
+        log += `Switch ${i + 1} to ${fileId.substring(0, 8)}: ${delay.toFixed(2)}ms\n`;
+      }
       
-      // Let the system settle slightly to simulate rapid user clicking but not 0ms
-      await new Promise(r => setTimeout(r, 100));
+      // Let the system settle slightly to simulate rapid user clicking
+      await new Promise(r => setTimeout(r, 80));
     }
     
-    log += `\nMax Frame Delay: ${maxDelay.toFixed(2)}ms\n`;
-    log += `Switches > 50ms: ${over50Count}/20\n`;
+    cancelAnimationFrame(frameRafId);
+    longTaskObserver?.disconnect();
+    
+    log += `\n--- Summary (${iterations} switches) ---\n`;
+    log += `Max switch delay: ${maxDelay.toFixed(2)}ms\n`;
+    log += `Max frame delay: ${frameMaxDelay.toFixed(2)}ms\n`;
+    log += `Switches > 50ms: ${over50Count}/${iterations}\n`;
+    log += `Switches > 200ms: ${over200Count}/${iterations}\n`;
+    log += `Long tasks (>50ms): ${longTasks.length}\n`;
+    if (longTasks.length > 0) {
+      log += `Worst long task: ${Math.max(...longTasks.map(t => t.duration))}ms\n`;
+      longTasks.slice(0, 5).forEach((t, i) => {
+        log += `  Task ${i + 1}: ${t.duration}ms at ${t.when}\n`;
+      });
+    }
     
     setProfileResults(log);
     setIsProfiling(false);
@@ -141,8 +191,8 @@ function App() {
               setSearchGlobal(global);
             }}
             onWorkspaceContextMenu={handleWorkspaceContextMenu}
-            activeFileContent={openTabs.find(t => t.id === activeFileId)?.content}
-            activeFileExtension={openTabs.find(t => t.id === activeFileId)?.extension}
+            activeFileContent={activeFileContent}
+            activeFileExtension={activeFileExtension}
             selectedWorkspaces={selectedWorkspaces}
             onToggleWorkspaceSelection={handleToggleWorkspaceSelection}
           />
@@ -284,4 +334,3 @@ function App() {
 }
 
 export default App;
-

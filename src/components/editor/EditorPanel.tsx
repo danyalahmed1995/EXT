@@ -22,6 +22,7 @@ import './EditorPanel.css';
 
 export type ViewMode = 'editor' | 'split' | 'preview';
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
+const MAX_HOT_EDITOR_VIEWS = 6;
 
 export interface EditorTab {
   id: string;
@@ -134,19 +135,49 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   previewKey,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const [hotEditorTabIds, setHotEditorTabIds] = React.useState<string[]>(() => activeTabId ? [activeTabId] : []);
+
+  React.useEffect(() => {
+    if (!activeTabId) return;
+    setHotEditorTabIds((prev) => {
+      const withoutActive = prev.filter((id) => id !== activeTabId && tabs.some((tab) => tab.id === id));
+      return [...withoutActive.slice(-(MAX_HOT_EDITOR_VIEWS - 1)), activeTabId];
+    });
+  }, [activeTabId, tabs]);
+
+  const hotEditorTabs = React.useMemo(
+    () => hotEditorTabIds
+      .map((id) => tabs.find((tab) => tab.id === id))
+      .filter((tab): tab is EditorTab => Boolean(tab)),
+    [hotEditorTabIds, tabs],
+  );
+
   React.useEffect(() => {
     if (activeTabId) {
       const el = document.getElementById(`editor-tab-${activeTabId}`);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+        el.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
       }
     }
   }, [activeTabId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
       e.preventDefault();
       if (activeTabId) onSaveFile(activeTabId);
+      return;
+    }
+
+    if (viewMode === 'preview') {
+      if (e.key === 'PageUp' || e.key === 'PageDown') {
+        const previewEl = document.querySelector('.markdown-preview');
+        if (previewEl) {
+          e.preventDefault();
+          const direction = e.key === 'PageDown' ? 1 : -1;
+          const amount = previewEl.clientHeight * 0.8;
+          previewEl.scrollBy({ top: direction * amount, behavior: 'smooth' });
+        }
+      }
     }
   };
 
@@ -166,6 +197,68 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     });
     window.dispatchEvent(event);
   };
+
+  const [lineCount, setLineCount] = React.useState<number | null>(null);
+  React.useEffect(() => {
+    const content = activeTab?.content ?? '';
+    if (!content) {
+      setLineCount(0);
+      return;
+    }
+
+    let cancelled = false;
+    let index = 0;
+    let count = 1;
+    let maxChunkMs = 0;
+    const startedAt = performance.now();
+
+    const schedule = (callback: IdleRequestCallback) => {
+      if ('requestIdleCallback' in window) {
+        return window.requestIdleCallback(callback, { timeout: 500 });
+      }
+      return globalThis.setTimeout(() => {
+        callback({ didTimeout: true, timeRemaining: () => 4 } as IdleDeadline);
+      }, 16);
+    };
+
+    const cancel = (id: number) => {
+      if ('cancelIdleCallback' in window) {
+        window.cancelIdleCallback(id);
+      } else {
+        globalThis.clearTimeout(id);
+      }
+    };
+
+    setLineCount(null);
+    let scheduledId = 0;
+    const processChunk: IdleRequestCallback = (_deadline) => {
+      const chunkStart = performance.now();
+      while (index < content.length && performance.now() - chunkStart < 4) {
+        if (content.charCodeAt(index) === 10) count++;
+        index++;
+      }
+
+      maxChunkMs = Math.max(maxChunkMs, performance.now() - chunkStart);
+      if (cancelled) return;
+
+      if (index >= content.length) {
+        setLineCount(count);
+        const totalMs = performance.now() - startedAt;
+        if (totalMs > 16 || maxChunkMs > 8) {
+          console.log(`[NavigationPerf] status line count: total=${totalMs.toFixed(1)}ms maxChunk=${maxChunkMs.toFixed(1)}ms`);
+        }
+      } else {
+        scheduledId = schedule(processChunk);
+      }
+    };
+
+    scheduledId = schedule(processChunk);
+    return () => {
+      cancelled = true;
+      if (scheduledId) cancel(scheduledId);
+    };
+  }, [activeTab?.id, activeTab?.content]);
+  const charCount = activeTab?.content ? activeTab.content.length : 0;
 
   if (!activeTab) {
     return (
@@ -209,9 +302,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       </div>
     );
   }
-
-  const lineCount = activeTab.content ? activeTab.content.split('\n').length : 0;
-  const charCount = activeTab.content ? activeTab.content.length : 0;
 
   const onRender = (
     id: string,
@@ -314,13 +404,24 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         >
           {(viewMode === 'editor' || viewMode === 'split') && (
             <div className={`editor-content-editor ${viewMode === 'editor' ? 'full' : ''}`}>
-              <CodeMirrorEditor
-                activeTabId={activeTab.id}
-                content={activeTab.content}
-                onChange={(newContent) => onContentChange(activeTab.id, newContent)}
-                onSave={() => onSaveFile(activeTab.id)}
-                isActive={true}
-              />
+              {hotEditorTabs.map((tab) => (
+                <div
+                  key={tab.id}
+                  style={{
+                    display: tab.id === activeTab.id ? 'block' : 'none',
+                    width: '100%',
+                    height: '100%',
+                  }}
+                >
+                  <CodeMirrorEditor
+                    activeTabId={tab.id}
+                    content={tab.content}
+                    onChange={onContentChange}
+                    onSave={onSaveFile}
+                    isActive={tab.id === activeTab.id}
+                  />
+                </div>
+              ))}
             </div>
           )}
 
@@ -335,8 +436,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               <CodeMirrorEditor
                 activeTabId={activeTab.id}
                 content={activeTab.content}
-                onChange={(newContent) => onContentChange(activeTab.id, newContent)}
-                onSave={() => onSaveFile(activeTab.id)}
+                onChange={onContentChange}
+                onSave={onSaveFile}
                 isActive={true}
               />
             </div>
@@ -350,7 +451,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <span className="editor-statusbar-item">
           <span className="editor-statusbar-accent">{activeTab.name}</span>
         </span>
-        <span className="editor-statusbar-item">{lineCount} lines</span>
+        <span className="editor-statusbar-item">{lineCount == null ? '...' : lineCount} lines</span>
         <span className="editor-statusbar-item">{charCount} chars</span>
         <span className="editor-statusbar-item" style={{ color: activeTab.saveStatus === 'error' ? 'var(--color-error)' : activeTab.saveStatus === 'saving' ? 'var(--color-accent)' : activeTab.isDirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
           {activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}

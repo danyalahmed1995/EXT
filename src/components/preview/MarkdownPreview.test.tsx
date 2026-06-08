@@ -23,24 +23,51 @@ class MockIntersectionObserver {
 }
 globalThis.IntersectionObserver = MockIntersectionObserver as any;
 
-// Mock Worker
-class MockWorker {
-  onmessage: any;
-  postMessage(data: any) {
-    if (data.type === 'render-block') {
-      setTimeout(() => {
-        if (this.onmessage) {
-          let html = data.source;
-          if (html.includes('Hello World')) html = '<h1>Hello World</h1>';
-          if (html.includes('alert')) html = html.replace('<script>', '&lt;script&gt;').replace('onerror', 'removed');
-          this.onmessage({ data: { type: 'block-result', renderId: data.renderId, blockId: data.blockId, html } });
+// Mock Worker via vitest
+vi.mock('../../workers/markdown.worker?worker', () => {
+  return {
+    default: class MockWorker {
+      listeners: any[] = [];
+      addEventListener(type: string, fn: any) {
+        if (type === 'message') this.listeners.push(fn);
+      }
+      removeEventListener(_type: string, fn: any) {
+        this.listeners = this.listeners.filter(l => l !== fn);
+      }
+      postMessage(data: any) {
+        if (data.type === 'index-blocks') {
+          setTimeout(() => {
+            const e = {
+              data: {
+                type: 'index-result',
+                indexId: data.indexId,
+                indexMs: 1,
+                blocks: [{
+                  id: 0,
+                  type: 'heading',
+                  source: data.content,
+                  lineCount: data.content.split(/\r?\n/).length,
+                  estimatedHeight: 80,
+                  mathHeavy: false,
+                }],
+              },
+            };
+            this.listeners.forEach(l => l(e));
+          }, 1);
+        } else if (data.type === 'render-block') {
+          setTimeout(() => {
+            let html = data.source;
+            if (html.includes('Hello World')) html = '<h1>Hello World</h1>';
+            if (html.includes('alert')) html = html.replace('<script>', '&lt;script&gt;').replace('onerror', 'removed');
+            const e = { data: { type: 'block-result', renderId: data.renderId, blockId: data.blockId, html } };
+            this.listeners.forEach(l => l(e));
+          }, 5);
         }
-      }, 5);
+      }
+      terminate() {}
     }
-  }
-  terminate() {}
-}
-globalThis.Worker = MockWorker as any;
+  };
+});
 
 describe('MarkdownPreview Component', () => {
   it('renders markdown content correctly', async () => {

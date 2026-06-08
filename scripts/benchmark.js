@@ -73,6 +73,7 @@ async function runBenchmark() {
       const filePath = path.join(folderPath, file);
       const stat = fs.statSync(filePath);
       const sizeMB = (stat.size / (1024 * 1024)).toFixed(2);
+      window.document.body.replaceChildren();
       log(`\nFile: ${file}`);
       log(`Size: ${sizeMB} MB`);
 
@@ -104,7 +105,6 @@ async function runBenchmark() {
 
         let maxInputDelay = 0;
         let isTyping = false;
-        let globalResumeQueue = null;
         // Simulate editor typing events every 150ms
         const inputSim = setInterval(() => {
           const start = performance.now();
@@ -116,7 +116,6 @@ async function runBenchmark() {
              // Simulate user pausing after typing
              setTimeout(() => { 
                 isTyping = false; 
-                if (globalResumeQueue) globalResumeQueue();
              }, 50); 
           }, 0);
         }, 150);
@@ -133,6 +132,23 @@ async function runBenchmark() {
             let remaining = viewportBlocks.length;
             let purifyQueue = [];
             let isPurifying = false;
+            let retryTimer = null;
+
+            const cleanup = () => {
+              if (retryTimer) {
+                clearTimeout(retryTimer);
+                retryTimer = null;
+              }
+              worker.off('message', listener);
+            };
+
+            const schedulePurifyRetry = () => {
+              if (retryTimer) return;
+              retryTimer = setTimeout(() => {
+                retryTimer = null;
+                processPurifyQueue();
+              }, 16);
+            };
 
             const processPurifyQueue = () => {
               if (purifyQueue.length === 0) {
@@ -142,16 +158,17 @@ async function runBenchmark() {
               // Simulate strict safety mode pausing
               if (isTyping) {
                  isPurifying = false;
+                 schedulePurifyRetry();
                  return;
               }
               
               isPurifying = true;
-              globalResumeQueue = () => { if (!isPurifying && purifyQueue.length > 0) processPurifyQueue(); };
               
               // Simulate requestIdleCallback
               setTimeout(() => {
                 if (isTyping || purifyQueue.length === 0) { 
                   isPurifying = false; 
+                  if (purifyQueue.length > 0) schedulePurifyRetry();
                   return; 
                 }
                 
@@ -168,7 +185,7 @@ async function runBenchmark() {
                 remaining--;
                 
                 if (remaining <= 0) { 
-                  worker.off('message', listener); 
+                  cleanup();
                   resolve(); 
                 } else {
                   processPurifyQueue();
@@ -186,7 +203,7 @@ async function runBenchmark() {
                 }
               } else if (msg.type === 'block-error') {
                 remaining--;
-                if (remaining <= 0) { worker.off('message', listener); resolve(); }
+                if (remaining <= 0) { cleanup(); resolve(); }
               }
             };
             worker.on('message', listener);
@@ -217,6 +234,7 @@ async function runBenchmark() {
         worker.terminate();
         clearInterval(hb);
         clearInterval(inputSim);
+        window.document.body.replaceChildren();
 
         const memAfter = process.memoryUsage().heapUsed;
         const memDelta = Math.max(0, (memAfter - memBefore) / (1024 * 1024));
@@ -254,6 +272,7 @@ async function runBenchmark() {
           failed++;
         }
       } catch (err) {
+        window.document.body.replaceChildren();
         log(`Status: FAIL (Exception)`);
         log(`Error: ${err.message}`);
         failed++;
@@ -394,6 +413,7 @@ async function runBenchmark() {
 
       await new Promise(r => setTimeout(r, 1000));
       instanceA.unmount();
+      window.document.body.replaceChildren();
 
       log(`Cold Tab Switch Blocking Time: ${switchDelayColdMs.toFixed(2)} ms`);
       log(`Hot Tab Switch Blocking Time: ${switchDelayHotMs.toFixed(2)} ms`);
