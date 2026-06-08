@@ -72,24 +72,25 @@ export function useAppLogic() {
       try {
         let storedWorkspaces: Workspace[] = JSON.parse(localStorage.getItem('ext_workspaces') || '[]');
         
-        let examplesPath = '';
-        try {
-          // Resolve the internal bundled Examples directory
-          examplesPath = await invoke<string>('initialize_example_workspace');
-        } catch (err) {
-          console.error('Failed to resolve example workspace:', err);
-        }
-        
-        // First-time launch: inject the examples workspace into the UI
-        if (storedWorkspaces.length === 0 && examplesPath) {
-          const newWorkspace: Workspace = {
-            id: `ws-${Date.now()}`,
-            name: 'Examples',
-            path: examplesPath,
-            detectedIcon: 'markdown'
-          };
-          storedWorkspaces.push(newWorkspace);
-          localStorage.setItem('ext_workspaces', JSON.stringify(storedWorkspaces));
+        if (import.meta.env.DEV && storedWorkspaces.length === 0) {
+          let examplesPath = '';
+          try {
+            examplesPath = await invoke<string>('initialize_example_workspace');
+          } catch (err) {
+            console.error('Failed to resolve example workspace:', err);
+          }
+
+          // Keep the sample workspace handy in development without shipping it in production.
+          if (examplesPath) {
+            const newWorkspace: Workspace = {
+              id: `ws-${Date.now()}`,
+              name: 'Examples',
+              path: examplesPath,
+              detectedIcon: 'markdown'
+            };
+            storedWorkspaces.push(newWorkspace);
+            localStorage.setItem('ext_workspaces', JSON.stringify(storedWorkspaces));
+          }
         }
         
         const storedFavorites: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
