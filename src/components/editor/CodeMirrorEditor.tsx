@@ -1,13 +1,18 @@
 import React, { useCallback, useEffect, useRef } from 'react';
 import { EditorView, lineNumbers, highlightActiveLine, highlightSpecialChars, drawSelection, keymap } from '@codemirror/view';
 import { EditorState } from '@codemirror/state';
-import type { ChangeSet, Extension } from '@codemirror/state';
+import type { Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
 import { languages } from '@codemirror/language-data';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { bracketMatching, foldGutter, indentOnInput } from '@codemirror/language';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
+import { autocompletion } from '@codemirror/autocomplete';
 import { extEditorTheme, extHighlightStyle } from '../../styles/editor-theme';
+import { getPerfTier } from '../../utils/performanceMode';
+import { markdownCompletionSource } from './markdownAutocomplete';
+import { createViewportSmartEditingPlugin } from './viewportSmartEditing';
+import { hugeMarkdownSyntaxPlugin } from './hugeMarkdownSyntax';
 
 interface CodeMirrorEditorProps {
   activeTabId: string;
@@ -25,11 +30,6 @@ interface CachedState {
 }
 
 const MAX_CACHED_STATES = 6;
-const LARGE_DOC_THRESHOLD = 250_000;
-
-function isLargeDocument(contentLength: number): boolean {
-  return contentLength >= LARGE_DOC_THRESHOLD;
-}
 
 function recordNavTiming(key: string, elapsed: number): void {
   const navPerf = (window as any).__NAV_PERF;
@@ -38,19 +38,7 @@ function recordNavTiming(key: string, elapsed: number): void {
   }
 }
 
-function applyChangesToString(content: string, changes: ChangeSet): string {
-  let next = '';
-  let position = 0;
-
-  changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
-    next += content.slice(position, fromA);
-    next += inserted.toString();
-    position = toA;
-  });
-
-  next += content.slice(position);
-  return next;
-}
+// applyChangesToString removed in favor of native doc.toString()
 
 export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   activeTabId,
@@ -93,7 +81,8 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   }, [clearPendingChange]);
 
   const createExtensions = useCallback((tabId: string, contentLength: number): Extension[] => {
-    const large = isLargeDocument(contentLength);
+    const t0 = performance.now();
+    const tier = getPerfTier(contentLength);
     const extensions: Extension[] = [
       lineNumbers(),
       highlightActiveLine(),
@@ -121,14 +110,13 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       ]),
       extEditorTheme,
       extHighlightStyle,
-      EditorView.contentAttributes.of({ spellcheck: large ? 'false' : 'true' }),
+      EditorView.contentAttributes.of({ spellcheck: tier === 'huge' ? 'false' : 'true' }),
       EditorView.updateListener.of((update) => {
         if (!update.docChanged) return;
 
-        const oldContent = contentCache.current.get(tabId) ?? '';
-        const t0 = performance.now();
-        const nextContent = applyChangesToString(oldContent, update.changes);
-        const elapsed = performance.now() - t0;
+        const tChangeStart = performance.now();
+        const nextContent = update.state.doc.toString();
+        const elapsed = performance.now() - tChangeStart;
         contentCache.current.set(tabId, nextContent);
         scheduleChange(tabId, nextContent);
 
@@ -139,7 +127,12 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       }),
     ];
 
-    if (!large) {
+    if (tier === 'normal') {
+      const tLang = performance.now();
+      const mdExt = markdown({ codeLanguages: languages });
+      const mdElapsed = performance.now() - tLang;
+      if (mdElapsed > 10) console.warn(`[NavigationPerf] Markdown lang activation: ${mdElapsed.toFixed(1)}ms`);
+
       extensions.splice(
         8,
         0,
@@ -147,18 +140,40 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         bracketMatching(),
         foldGutter(),
         highlightSelectionMatches(),
-        markdown({ codeLanguages: languages }),
+        mdExt,
         EditorView.lineWrapping,
+        autocompletion({ override: [markdownCompletionSource] }),
       );
-    } else {
-      extensions.splice(8, 0, bracketMatching(), highlightSelectionMatches());
+    } else if (tier === 'large') {
+      extensions.splice(
+        8,
+        0,
+        bracketMatching(),
+        highlightSelectionMatches(),
+        markdown({ codeLanguages: languages }),
+        createViewportSmartEditingPlugin(tabId, { debounceMs: 500, bufferSize: 1000 }),
+        autocompletion({ override: [markdownCompletionSource] }),
+      );
+    } else { // huge
+      extensions.splice(
+        8, 
+        0, 
+        bracketMatching(), 
+        highlightSelectionMatches(),
+        hugeMarkdownSyntaxPlugin,
+        createViewportSmartEditingPlugin(tabId, { debounceMs: 1000, bufferSize: 400 }),
+        autocompletion({ override: [markdownCompletionSource] }),
+      );
     }
+
+    const tTotal = performance.now() - t0;
+    if (tTotal > 16) console.warn(`[NavigationPerf] Extension array construction: ${tTotal.toFixed(1)}ms`);
 
     return extensions;
   }, [clearPendingChange, scheduleChange]);
 
   const createEditorState = useCallback((tabId: string, doc: string) => {
-    const large = isLargeDocument(doc.length);
+    const tier = getPerfTier(doc.length);
     const t0 = performance.now();
     const state = EditorState.create({
       doc,
@@ -169,7 +184,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     recordNavTiming('cmStateCreate', elapsed);
     if (elapsed > 16) {
       console.warn(
-        `[NavigationPerf] CodeMirror state create: ${elapsed.toFixed(1)}ms mode=${large ? 'plain-large' : 'markdown'} size=${(doc.length / 1024).toFixed(0)}KB`,
+        `[NavigationPerf] CodeMirror state create: ${elapsed.toFixed(1)}ms mode=${tier} size=${(doc.length / 1024).toFixed(0)}KB`,
       );
     }
 

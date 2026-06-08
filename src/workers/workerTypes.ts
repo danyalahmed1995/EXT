@@ -1,6 +1,6 @@
 import type { Heading } from '../utils/outlineParser';
 
-export type WorkerTaskType = 'extract-outline';
+export type WorkerTaskType = 'extract-outline' | 'analyze-markdown-range';
 
 export interface BaseWorkerTask {
   jobId: number;
@@ -14,7 +14,14 @@ export interface OutlineTask extends BaseWorkerTask {
   content: string;
 }
 
-export type WorkerTask = OutlineTask;
+export interface RangeTask extends BaseWorkerTask {
+  type: 'analyze-markdown-range';
+  text: string;
+  from: number;
+  to: number;
+}
+
+export type WorkerTask = OutlineTask | RangeTask;
 
 export interface BaseWorkerResult {
   jobId: number;
@@ -30,4 +37,11 @@ export interface OutlineResult extends BaseWorkerResult {
   headings: Heading[];
 }
 
-export type WorkerResult = OutlineResult;
+export interface RangeResult extends BaseWorkerResult {
+  type: 'analyze-markdown-range';
+  // Fast local metadata extracted from the range.
+  // For example, local headings within the visible buffer.
+  headings: Heading[];
+}
+
+export type WorkerResult = OutlineResult | RangeResult;
