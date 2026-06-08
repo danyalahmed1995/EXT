@@ -57,11 +57,11 @@ export const VirtualChunk: React.FC<VirtualChunkProps> = React.memo(({ html, abs
         'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'br', 'hr',
         'strong', 'em', 'del', 's', 'a', 'img',
         'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tr', 'th', 'td',
-        'pre', 'code', 'blockquote', 'input', 'span', 'div',
+        'pre', 'code', 'blockquote', 'input', 'span', 'div', 'details', 'summary',
         'math', 'annotation', 'semantics', 'mrow', 'mi', 'mn', 'mo', 'ms', 'mspace', 'mtext', 'menclose', 'merror', 'mpadded', 'mphantom', 'mroot', 'msqrt', 'msub', 'msup', 'msubsup', 'mmultiscripts', 'mover', 'munder', 'munderover', 'mtable', 'mtr', 'mtd',
       ],
       ALLOWED_ATTR: [
-        'href', 'src', 'alt', 'title', 'target',
+        'href', 'src', 'alt', 'title', 'target', 'align', 'width', 'height',
         'type', 'checked', 'disabled', 'class', 'style', 'aria-hidden',
         'mathvariant', 'encoding', 'display', 'xmlns',
       ],
