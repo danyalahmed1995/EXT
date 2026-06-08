@@ -1,24 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { workerManager } from '../../workers/workerManager';
+import { extractOutlineSync, type Heading } from '../../utils/outlineParser';
 import './MarkdownOutline.css';
-
-interface Heading {
-  level: number;
-  text: string;
-  lineIndex: number;
-}
 
 interface MarkdownOutlineProps {
   content: string;
+  fileId: string;
   isMarkdown: boolean;
 }
 
 const ITEMS_PER_PAGE = 250;
-const MAX_CHUNK_MS = 8;
+const SAFE_SYNC_FALLBACK_SIZE = 500_000; // 500KB
 
-export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMarkdown }) => {
+export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, fileId, isMarkdown }) => {
   const [headings, setHeadings] = useState<Heading[]>([]);
   const [isScanning, setIsScanning] = useState(false);
   const [renderLimit, setRenderLimit] = useState(ITEMS_PER_PAGE);
+
+  // Use a local session version to reject stale async results
+  const sessionVersionRef = useRef(0);
 
   useEffect(() => {
     if (!isMarkdown || !content) {
@@ -27,95 +27,56 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
       return;
     }
 
-    let cancelled = false;
-    let idleId = 0;
+    let isCancelled = false;
     let debounceId = 0;
 
-    const cancelScheduled = () => {
-      if (idleId) globalThis.clearTimeout(idleId);
-      if (debounceId) window.clearTimeout(debounceId);
-    };
+    const currentVersion = ++sessionVersionRef.current;
 
     setIsScanning(true);
-    setHeadings([]);
     setRenderLimit(ITEMS_PER_PAGE);
 
-    debounceId = window.setTimeout(() => {
-      let position = 0;
-      let lineIndex = 0;
-      let allHeadings: Heading[] = [];
+    debounceId = window.setTimeout(async () => {
+      if (isCancelled) return;
 
-      const processChunk = () => {
-        const chunkStart = performance.now();
-        let newlyFound: Heading[] = [];
-
-        while (performance.now() - chunkStart < MAX_CHUNK_MS) {
-          if (position >= content.length) {
-            if (newlyFound.length > 0) {
-              allHeadings = allHeadings.concat(newlyFound);
-              setHeadings([...allHeadings]);
-            }
-            if (!cancelled) {
-              setIsScanning(false);
-            }
-            return;
-          }
-
-          const nextNewline = content.indexOf('\n', position);
-          const endOfLine = nextNewline === -1 ? content.length : nextNewline;
-          
-          let cursor = position;
-          if (position === 0 && content.charCodeAt(0) === 0xFEFF) cursor++;
-          
-          while (cursor < endOfLine && (content.charCodeAt(cursor) === 32 || content.charCodeAt(cursor) === 9)) {
-            cursor++;
-          }
-          
-          const hashStart = cursor;
-          if (content.charCodeAt(cursor) === 35) {
-            while(cursor < endOfLine && content.charCodeAt(cursor) === 35) cursor++;
-            const level = cursor - hashStart;
-            
-            if (level >= 1 && level <= 6 && cursor < endOfLine) {
-              const nextChar = content.charCodeAt(cursor);
-              if (nextChar === 32 || nextChar === 9) {
-                let titleEnd = endOfLine;
-                if (titleEnd > cursor && content.charCodeAt(titleEnd - 1) === 13) titleEnd--;
-                const text = content.slice(cursor + 1, titleEnd).trim();
-                
-                if (text) {
-                  newlyFound.push({
-                    level,
-                    text,
-                    lineIndex
-                  });
-                }
-              }
-            }
-          }
-          
-          position = endOfLine + 1;
-          lineIndex++;
+      try {
+        const result = await workerManager.extractOutline(fileId, currentVersion, content);
+        
+        // Ignore stale results
+        if (isCancelled || currentVersion !== sessionVersionRef.current || fileId !== result.fileId) {
+          workerManager.log(`Ignored stale outline result for v${result.version}`);
+          return;
         }
 
-        if (cancelled) return;
+        setHeadings(result.headings);
+        setIsScanning(false);
 
-        if (newlyFound.length > 0) {
-          allHeadings = allHeadings.concat(newlyFound);
-          setHeadings([...allHeadings]);
+      } catch (err) {
+        if (isCancelled) return;
+        
+        workerManager.log(`Worker failed, attempting fallback`, 0);
+        
+        // Only fallback synchronously if the file is a safe size to avoid UI freeze
+        if (content.length < SAFE_SYNC_FALLBACK_SIZE) {
+          const fallbackHeadings = extractOutlineSync(content);
+          if (!isCancelled && currentVersion === sessionVersionRef.current) {
+            setHeadings(fallbackHeadings);
+            setIsScanning(false);
+          }
+        } else {
+          console.warn('[MarkdownOutline] File too large for synchronous fallback. Outline disabled.');
+          if (!isCancelled && currentVersion === sessionVersionRef.current) {
+            setHeadings([]);
+            setIsScanning(false);
+          }
         }
-
-        idleId = globalThis.setTimeout(processChunk, 10);
-      };
-
-      idleId = globalThis.setTimeout(processChunk, 0);
+      }
     }, 150);
 
     return () => {
-      cancelled = true;
-      cancelScheduled();
+      isCancelled = true;
+      if (debounceId) window.clearTimeout(debounceId);
     };
-  }, [content, isMarkdown]);
+  }, [content, fileId, isMarkdown]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
@@ -154,7 +115,7 @@ export const MarkdownOutline: React.FC<MarkdownOutlineProps> = ({ content, isMar
       {isScanning && (
         <div className="markdown-outline-status">
           <span className="scanning-dot" />
-          Outline indexing… {headings.length} loaded
+          Outline indexing…
         </div>
       )}
       {!isScanning && headings.length === 0 && (
