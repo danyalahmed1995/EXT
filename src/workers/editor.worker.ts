@@ -20,6 +20,19 @@ self.onmessage = (e: MessageEvent<WorkerTask>) => {
       };
 
       self.postMessage(result);
+    } else if (task.type === 'analyze-markdown-range') {
+      const headings = extractOutlineSync(task.text);
+      
+      const result: import('./workerTypes').RangeResult = {
+        jobId: task.jobId,
+        fileId: task.fileId,
+        version: task.version,
+        type: 'analyze-markdown-range',
+        headings,
+        durationMs: Math.round(performance.now() - start),
+      };
+
+      self.postMessage(result);
     }
   } catch (err: any) {
     self.postMessage({

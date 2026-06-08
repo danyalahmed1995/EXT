@@ -86,7 +86,27 @@ class WorkerManager {
       fileId,
       version,
       content,
-    });
+    } as Omit<import('./workerTypes').OutlineTask, 'jobId'>);
+  }
+
+  /**
+   * Dispatches a range analysis task to the worker.
+   */
+  public async analyzeRange(
+    fileId: string,
+    version: number,
+    text: string,
+    from: number,
+    to: number,
+  ): Promise<import('./workerTypes').RangeResult> {
+    return this.dispatch<import('./workerTypes').RangeResult>({
+      type: 'analyze-markdown-range',
+      fileId,
+      version,
+      text,
+      from,
+      to,
+    } as Omit<import('./workerTypes').RangeTask, 'jobId'>);
   }
   
   // Expose logging helper for components
