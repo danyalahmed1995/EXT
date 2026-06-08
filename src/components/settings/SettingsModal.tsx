@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import "./SettingsModal.css";
-import { AppearanceSettings } from "../../types";
+import { EXTIcon, GitHubIcon } from '../../icons/icons';
+import { AppearanceSettings } from '../../types';
+import { openUrl } from '@tauri-apps/plugin-opener';
 
 interface SettingsModalProps {
 	appearance: AppearanceSettings;
@@ -47,6 +49,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	const handleKeyDown = (e: React.KeyboardEvent) => {
 		if (e.key === "Enter") {
 			handleAddDir();
+		}
+	};
+
+	const openLink = async (e: React.MouseEvent<HTMLAnchorElement>, url: string) => {
+		e.preventDefault();
+		try {
+			await openUrl(url);
+		} catch (err) {
+			console.error("Failed to open link:", err);
 		}
 	};
 
@@ -159,6 +170,35 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 									Reduce motion mode
 								</span>
 							</label>
+
+							<label className="settings-toggle">
+								<input
+									type="checkbox"
+									checked={!!appearance.previewCentered}
+									onChange={() => handleToggle("previewCentered")}
+								/>
+								<span className="toggle-label">
+									Center preview content (reading mode)
+								</span>
+							</label>
+
+							<label
+								className="settings-toggle"
+								style={{
+									marginTop: "1rem",
+									paddingTop: "1rem",
+									borderTop: "1px solid var(--color-border-subtle)",
+								}}
+							>
+								<input
+									type="checkbox"
+									checked={!!appearance.enableProfiler}
+									onChange={() => handleToggle("enableProfiler")}
+								/>
+								<span className="toggle-label">
+									Enable Navigation Profiler (Debug)
+								</span>
+							</label>
 						</div>
 					</section>
 
@@ -229,6 +269,53 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								Remove All
 							</button>
 						</div>
+					</section>
+
+					<section
+						className="settings-section about-section"
+						style={{
+							marginTop: "2rem",
+							paddingTop: "1.5rem",
+							borderTop: "1px solid var(--color-border-subtle)",
+							display: "flex",
+							gap: "1rem",
+							justifyContent: "center",
+						}}
+					>
+						<a
+							href="https://github.com/danyalahmed1995/EXT"
+							onClick={(e) => openLink(e, "https://github.com/danyalahmed1995/EXT")}
+							className="about-link"
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: "0.5rem",
+								color: "var(--color-text-secondary)",
+								textDecoration: "none",
+								transition: "color 0.2s",
+								cursor: "pointer",
+							}}
+						>
+							<EXTIcon size={20} />
+							<span>EXT Repository</span>
+						</a>
+						<a
+							href="https://github.com/danyalahmed1995/"
+							onClick={(e) => openLink(e, "https://github.com/danyalahmed1995/")}
+							className="about-link"
+							style={{
+								display: "flex",
+								alignItems: "center",
+								gap: "0.5rem",
+								color: "var(--color-text-secondary)",
+								textDecoration: "none",
+								transition: "color 0.2s",
+								cursor: "pointer",
+							}}
+						>
+							<GitHubIcon size={20} />
+							<span>Author</span>
+						</a>
 					</section>
 				</div>
 			</div>

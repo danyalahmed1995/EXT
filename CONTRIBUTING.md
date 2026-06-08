@@ -161,3 +161,18 @@ Avoid:
 ## Documentation
 
 Update documentation when your change affects setup, architecture, contribution rules, user behavior, or safety expectations.
+
+## Releases
+
+Release artifact versions are synced directly from Git tags. 
+To create a new release:
+
+1. Create a tag in the format `vX.Y.Z` (e.g., `v0.1.2`).
+2. Push the tag to origin.
+
+```bash
+git tag v0.1.2
+git push origin v0.1.2
+```
+
+The GitHub Actions workflow will automatically read the tag, sync the version across `package.json`, `tauri.conf.json`, and `Cargo.toml`, and generate release artifacts with the corresponding version (e.g., `EXT_0.1.2_aarch64.dmg`). Local builds will continue to use the version in `package.json` unless the `RELEASE_VERSION` environment variable is set.

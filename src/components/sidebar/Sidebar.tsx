@@ -47,6 +47,7 @@ interface SidebarProps {
   onWorkspaceContextMenu?: (e: React.MouseEvent, workspaceId: string) => void;
   activeFileContent?: string;
   activeFileExtension?: string;
+  activeFileId: string | null;
   selectedWorkspaces: Set<string>;
   onToggleWorkspaceSelection: (workspaceId: string) => void;
 }
@@ -198,6 +199,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
   onWorkspaceContextMenu,
   activeFileContent,
   activeFileExtension,
+  activeFileId,
   selectedWorkspaces,
   onToggleWorkspaceSelection,
 }) => {
@@ -317,9 +319,9 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         </SidebarSection>
 
         {/* Outline */}
-        {(activeFileExtension === '.md' || activeFileExtension === '.markdown') && activeFileContent && (
+        {(activeFileExtension === '.md' || activeFileExtension === '.markdown') && activeFileContent && activeFileId && (
           <SidebarSection title="Outline" defaultExpanded={true}>
-            <MarkdownOutline content={activeFileContent} isMarkdown={true} />
+            <MarkdownOutline content={activeFileContent} fileId={activeFileId} isMarkdown={true} />
           </SidebarSection>
         )}
       </div>

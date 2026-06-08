@@ -7,6 +7,7 @@ interface AppShellProps {
   sidebar: React.ReactNode;
   fileList: React.ReactNode;
   editor: React.ReactNode;
+  isSidebarVisible?: boolean;
 }
 
 // ── ResizeHandle Component ──────────────────────────
@@ -66,6 +67,7 @@ export const AppShell: React.FC<AppShellProps> = ({
   sidebar,
   fileList,
   editor,
+  isSidebarVisible = true,
 }) => {
   const [sidebarWidth, setSidebarWidth] = useState(220);
   const [fileListWidth, setFileListWidth] = useState(300);
@@ -80,10 +82,14 @@ export const AppShell: React.FC<AppShellProps> = ({
 
   return (
     <div className="app-shell">
-      <div className="pane-sidebar" style={{ width: sidebarWidth }}>
-        {sidebar}
-      </div>
-      <ResizeHandle onDrag={handleSidebarResize} />
+      {isSidebarVisible && (
+        <>
+          <div className="pane-sidebar" style={{ width: sidebarWidth }}>
+            {sidebar}
+          </div>
+          <ResizeHandle onDrag={handleSidebarResize} />
+        </>
+      )}
       <div className="pane-filelist" style={{ width: fileListWidth }}>
         {fileList}
       </div>

@@ -175,6 +175,33 @@ export const extEditorTheme: Extension = EditorView.theme(
       backgroundColor: 'rgba(255, 255, 255, 0.1)',
       borderRadius: 'var(--radius-sm)',
     },
+    // Huge Markdown fallback styles
+    '.cm-huge-header': {
+      color: 'var(--color-syntax-keyword)',
+      fontWeight: 'bold',
+      fontFamily: 'var(--font-display)',
+    },
+    '.cm-huge-list': {
+      color: 'var(--color-syntax-name)',
+    },
+    '.cm-huge-code': {
+      color: 'var(--color-syntax-string)',
+      backgroundColor: 'rgba(0,0,0,0.15)',
+      borderRadius: '3px',
+      padding: '0 3px',
+    },
+    '.cm-huge-strong': {
+      color: 'var(--color-syntax-constant)',
+      fontWeight: 'bold',
+    },
+    '.cm-huge-em': {
+      color: 'var(--color-syntax-string)',
+      fontStyle: 'italic',
+    },
+    '.cm-huge-link': {
+      color: 'var(--color-accent)',
+      textDecoration: 'underline',
+    },
   },
   { dark: true }
 );

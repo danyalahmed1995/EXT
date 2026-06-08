@@ -31,4 +31,6 @@ export interface AppearanceSettings {
   previewTransitions: boolean;
   reduceMotion: boolean;
   ignoredDirs: string[];
+  enableProfiler?: boolean;
+  previewCentered?: boolean;
 }

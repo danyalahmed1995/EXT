@@ -210,6 +210,20 @@ cargo test
 
 The repository includes GitHub Actions workflows for frontend and Rust/Tauri checks on pushes and pull requests.
 
+### Benchmarking Performance
+
+To run the large markdown preview responsiveness benchmark, use:
+
+```bash
+npm run benchmark:large-md
+```
+
+This benchmark tests the app's demand-driven rendering architecture against massive markdown and LaTeX files (up to 130,000 lines). It simulates the orchestration engine to verify:
+- Background Web Worker processing and HTML chunk generation speed.
+- Main-thread DOM injection and DOMPurify sanitization latency.
+- **Editor Responsiveness**: Simulates concurrent editor keystrokes and fails if the main thread delays editor input by > 50ms.
+- Stable memory consumption without OOM crashes.
+
 ## Documentation
 
 - `DESIGN.md` explains the architecture.

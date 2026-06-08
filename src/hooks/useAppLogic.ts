@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, startTransition } from 'react';
 import { ViewMode, EditorTab } from '../components/editor/EditorPanel';
 import { ContextMenuItem } from '../components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
@@ -6,6 +6,8 @@ import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { listen } from '@tauri-apps/api/event';
 import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { openPath } from '@tauri-apps/plugin-opener';
+import { convertLineEndings, detectLineEnding, prepareContentForSave, type ConvertibleLineEnding } from '../utils/lineEndings';
 
 export function useAppLogic() {
 
@@ -54,6 +56,8 @@ export function useAppLogic() {
     previewTransitions: true,
     reduceMotion: false,
     ignoredDirs: defaultIgnoredDirs,
+    enableProfiler: false,
+    previewCentered: false,
   });
 
   const appearanceRef = useRef(appearance);
@@ -69,11 +73,21 @@ export function useAppLogic() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
+  const pendingOpenFileIds = useRef<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
   };
+
+  const readActiveEditorContent = useCallback((tabId: string, fallback: string) => {
+    if (tabId !== activeFileId) return fallback;
+    const event = new CustomEvent<{ content?: string }>('editor-read-active-content', {
+      detail: {},
+    });
+    window.dispatchEvent(event);
+    return event.detail.content ?? fallback;
+  }, [activeFileId]);
 
   // ── Initialization (Load Persistence) ───────────────
 
@@ -116,6 +130,8 @@ export function useAppLogic() {
           previewTransitions: true,
           reduceMotion: window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
           ignoredDirs: defaultIgnoredDirs,
+          enableProfiler: false,
+          previewCentered: false,
         };
         const storedAppearance: AppearanceSettings = JSON.parse(localStorage.getItem('ext_appearance') || 'null') || defaultAppearance;
         if (!storedAppearance.ignoredDirs || !Array.isArray(storedAppearance.ignoredDirs)) {
@@ -178,6 +194,7 @@ export function useAppLogic() {
             content,
             isDirty: false,
             absolutePath: first.absolutePath,
+            lineEnding: detectLineEnding(content),
           }]);
         } else {
           setActiveFileId(null);
@@ -316,6 +333,9 @@ export function useAppLogic() {
     return result;
   }, [activeView, files, searchQuery, searchGlobal, sortMode, customFileOrder]);
 
+  const filesById = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
+  const workspacesById = useMemo(() => new Map(workspaces.map((workspace) => [workspace.id, workspace])), [workspaces]);
+
   const viewTitle = useMemo(() => {
     switch (activeView) {
       case 'recent': return 'Recent';
@@ -364,45 +384,55 @@ export function useAppLogic() {
 
   const handleFileSelect = useCallback(
     (fileId: string) => {
-      setContextMenu(null);
-      setActiveFileId(fileId);
-      if (!openTabs.find((t) => t.id === fileId)) {
-        const file = files.find((f) => f.id === fileId);
-        const workspace = workspaces.find((w) => w.id === file?.workspaceId);
-        if (file && workspace) {
-          // If the file is >2MB, the content might be a placeholder. We should really read it here via invoke('read_file')
-          // but for now we will just use the content we got, or maybe fetch it.
-          // Since the prompt requires MVP and 2MB limit was added, we can read the file live.
-          invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
-            setOpenTabs((tabs) => [
-              ...tabs,
-              {
-                id: file.id,
-                name: file.name,
-                extension: file.extension,
-                content: content || '',
-                isDirty: false,
-                absolutePath: file.absolutePath,
-              },
-            ]);
-          }).catch(() => {
-             // Fallback
-             setOpenTabs((tabs) => [
-              ...tabs,
-              {
-                id: file.id,
-                name: file.name,
-                extension: file.extension,
-                content: '',
-                isDirty: false,
-                absolutePath: file.absolutePath,
-              },
-            ]);
-          });
-        }
+      const alreadyOpen = openTabs.some((t) => t.id === fileId);
+      if (activeFileId === fileId && alreadyOpen) {
+        setContextMenu((prev) => (prev === null ? prev : null));
+        return;
       }
+
+      setContextMenu((prev) => (prev === null ? prev : null));
+      setActiveFileId((prev) => (prev === fileId ? prev : fileId));
+
+      if (alreadyOpen || pendingOpenFileIds.current.has(fileId)) return;
+
+      const file = filesById.get(fileId);
+      const workspace = file ? workspacesById.get(file.workspaceId) : undefined;
+      if (!file || !workspace) return;
+
+      pendingOpenFileIds.current.add(fileId);
+
+      // Instantly insert a loading tab so the UI doesn't jump to empty.
+      setOpenTabs((tabs) => {
+        if (tabs.some((t) => t.id === fileId)) return tabs;
+        return [
+          ...tabs,
+          {
+            id: file.id,
+            name: file.name,
+            extension: file.extension,
+            content: '',
+            isDirty: false,
+            absolutePath: file.absolutePath,
+            lineEnding: 'LF',
+            isLoading: true
+          },
+        ];
+      });
+
+      invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
+        // Update the tab with the real content and stop loading spinner.
+        startTransition(() => {
+          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', lineEnding: detectLineEnding(content || ''), isLoading: false } : t));
+        });
+      }).catch(() => {
+        startTransition(() => {
+          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: '', isLoading: false } : t));
+        });
+      }).finally(() => {
+        pendingOpenFileIds.current.delete(fileId);
+      });
     },
-    [openTabs, files]
+    [activeFileId, openTabs, filesById, workspacesById]
   );
 
   const handleTabClose = useCallback(
@@ -441,7 +471,7 @@ export function useAppLogic() {
     if (file && workspace) {
       try {
         const content = await invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath });
-        setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, isDirty: false } : t));
+        setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, lineEnding: detectLineEnding(content), isDirty: false } : t));
         showToast('File reloaded');
       } catch (e) {
         showToast('Failed to reload file');
@@ -685,6 +715,7 @@ export function useAppLogic() {
           isDirty: false,
           saveStatus: 'saved',
           absolutePath: newFile.absolutePath,
+          lineEnding: 'LF',
         },
       ]);
       setActiveFileId(newFile.id);
@@ -840,7 +871,9 @@ export function useAppLogic() {
     const file = files.find((f) => f.id === tabId);
     const workspace = workspaces.find((w) => w.id === file?.workspaceId);
 
-    if (!tab || !file || !workspace || !tab.isDirty) return;
+    if (!tab || !file || !workspace) return;
+    const latestContent = readActiveEditorContent(tab.id, tab.content);
+    if (!tab.isDirty && latestContent === tab.content) return;
 
     setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'saving' } : t)));
 
@@ -848,26 +881,42 @@ export function useAppLogic() {
       const modifiedAt = await invoke('save_file', {
         workspacePath: workspace.path,
         relativePath: file.relativePath,
-        content: tab.content,
+        content: prepareContentForSave(latestContent, tab.lineEnding),
       });
 
       // Update file list modified date
       setFiles((prev) =>
         prev.map((f) =>
-          f.id === file.id ? { ...f, modifiedAt: modifiedAt as string, content: tab.content } : f
+          f.id === file.id ? { ...f, modifiedAt: modifiedAt as string, content: latestContent } : f
         )
       );
 
       // Clear dirty flag
       setOpenTabs((prev) =>
-        prev.map((t) => (t.id === tab.id ? { ...t, isDirty: false, saveStatus: 'saved' } : t))
+        prev.map((t) => (t.id === tab.id ? { ...t, content: latestContent, isDirty: false, saveStatus: 'saved' } : t))
       );
     } catch (err) {
       console.error('Failed to save file:', err);
       setOpenTabs((prev) => prev.map((t) => (t.id === tab.id ? { ...t, saveStatus: 'error' } : t)));
       showToast(`Failed to save file: ${err}`);
     }
-  }, [openTabs, files, workspaces]);
+  }, [openTabs, files, workspaces, readActiveEditorContent]);
+
+  const handleConvertLineEnding = useCallback((tabId: string, target: ConvertibleLineEnding) => {
+    setOpenTabs((tabs) =>
+      tabs.map((tab) => {
+        if (tab.id !== tabId) return tab;
+        const latestContent = readActiveEditorContent(tab.id, tab.content);
+        return {
+          ...tab,
+          content: convertLineEndings(latestContent, target),
+          lineEnding: target,
+          isDirty: true,
+          saveStatus: 'unsaved',
+        };
+      })
+    );
+  }, [readActiveEditorContent]);
 
   // ── Delete File Handler ─────────────────────────────
 
@@ -962,6 +1011,23 @@ export function useAppLogic() {
     }
   }, [files]);
 
+  // ── Open in Default App Handler ─────────────────────
+
+  const handleOpenInDefaultApp = useCallback(async (fileId: string) => {
+    const file = files.find(f => f.id === fileId);
+    if (!file || !file.absolutePath) {
+      showToast('File not found or invalid');
+      return;
+    }
+
+    try {
+      await openPath(file.absolutePath);
+    } catch (err) {
+      console.error('Failed to open file in default app:', err);
+      showToast(`Failed to open file in default app: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, [files]);
+
   // ── Context Menus ───────────────────────────────────
 
   useEffect(() => {
@@ -978,6 +1044,10 @@ export function useAppLogic() {
             label: 'Save',
             shortcut: 'Ctrl+S',
             onClick: () => handleSaveFile(tabId),
+          },
+          {
+            label: 'Open in Default App',
+            onClick: () => handleOpenInDefaultApp(tabId),
           },
           {
             label: 'Copy',
@@ -1010,7 +1080,7 @@ export function useAppLogic() {
 
     window.addEventListener('editor-context-menu', handleEditorContextMenu);
     return () => window.removeEventListener('editor-context-menu', handleEditorContextMenu);
-  }, [handleSaveFile, handleReloadTab, handleClearOtherTabs]);
+  }, [handleSaveFile, handleOpenInDefaultApp, handleReloadTab, handleClearOtherTabs]);
 
   useEffect(() => {
     const handleTabBarContextMenu = (e: Event) => {
@@ -1023,6 +1093,10 @@ export function useAppLogic() {
         x,
         y,
         items: [
+          {
+            label: 'Open in Default App',
+            onClick: () => handleOpenInDefaultApp(targetTabId),
+          },
           {
             label: 'Reload',
             shortcut: '',
@@ -1043,29 +1117,62 @@ export function useAppLogic() {
     };
     window.addEventListener('tab-bar-context-menu', handleTabBarContextMenu);
     return () => window.removeEventListener('tab-bar-context-menu', handleTabBarContextMenu);
-  }, [handleReloadTab, handleClearOtherTabs]);
+  }, [handleOpenInDefaultApp, handleReloadTab, handleClearOtherTabs]);
 
   // ── Keyboard Shortcuts ─────────────────────────────────
 
   useEffect(() => {
+    const focusEditorPane = () => {
+      window.dispatchEvent(new Event('editor-focus-active'));
+    };
+
+    const focusPreviewPane = () => {
+      const preview = document.querySelector<HTMLElement>('.markdown-preview');
+      if (!preview) return;
+      if (!preview.hasAttribute('tabindex')) preview.tabIndex = -1;
+      preview.focus({ preventScroll: true });
+    };
+
+    const selectAdjacentTab = (direction: 1 | -1) => {
+      if (openTabs.length < 2 || !activeFileId) return;
+      const currentIndex = openTabs.findIndex((tab) => tab.id === activeFileId);
+      if (currentIndex === -1) return;
+      const nextIndex = (currentIndex + direction + openTabs.length) % openTabs.length;
+      setActiveFileId(openTabs[nextIndex].id);
+    };
+
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey)) {
-        if (e.key === 's') {
+        const key = e.key.toLowerCase();
+
+        if (key === 's') {
           e.preventDefault();
           if (activeFileId) handleSaveFile(activeFileId);
-        } else if (e.key === 'n' && !e.shiftKey) {
+        } else if (key === 'n' && !e.shiftKey) {
           e.preventDefault();
           setShowNewFileModal(true);
-        } else if (e.key === 'n' && e.shiftKey) {
+        } else if (key === 'n' && e.shiftKey) {
           e.preventDefault();
           // Prompt for folder in currently active workspace (or first workspace if none)
           const wsId = activeView.startsWith('ws-') ? activeView.replace('ws-', '') : workspaces[0]?.id;
           if (wsId) {
             handleCreateFolder(wsId);
           }
-        } else if (e.key === 'p') {
+        } else if (key === 'p') {
           e.preventDefault();
           document.getElementById('global-search-input')?.focus();
+        } else if (key === '1') {
+          e.preventDefault();
+          focusEditorPane();
+        } else if (key === '2') {
+          e.preventDefault();
+          focusPreviewPane();
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          selectAdjacentTab(e.shiftKey ? -1 : 1);
+        } else if (key === 'w') {
+          e.preventDefault();
+          if (activeFileId) handleTabClose(activeFileId);
         }
       } else if (e.key === 'F2') {
         if (activeFileId) {
@@ -1094,7 +1201,7 @@ export function useAppLogic() {
     
     window.addEventListener('keydown', handleGlobalKeyDown);
     return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-  }, [activeFileId, handleSaveFile, activeView, workspaces, handleCreateFolder]);
+  }, [activeFileId, handleSaveFile, activeView, workspaces, handleCreateFolder, openTabs, handleTabClose]);
 
   // ── External File Change Detection ──────────────────────
 
@@ -1167,7 +1274,7 @@ export function useAppLogic() {
               relativePath: file.relativePath
             });
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, isDirty: false, saveStatus: 'saved' } : t));
+            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent), isDirty: false, saveStatus: 'saved' } : t));
           } else {
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, modifiedAt: diskModifiedTime } : f));
           }
@@ -1177,7 +1284,7 @@ export function useAppLogic() {
             relativePath: file.relativePath
           });
           setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent } : t));
+          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent) } : t));
         }
       }
     } catch (e) {
@@ -1202,6 +1309,7 @@ export function useAppLogic() {
       y: e.clientY,
       items: [
         { label: 'New File', onClick: () => setShowNewFileModal(true), shortcut: 'Ctrl+N' },
+        { label: 'Open in Default App', onClick: () => handleOpenInDefaultApp(fileId) },
         { label: 'Reveal in File Explorer', onClick: async () => {
             const file = files.find(f => f.id === fileId);
             const workspace = workspaces.find(w => w.id === file?.workspaceId);
@@ -1216,7 +1324,7 @@ export function useAppLogic() {
         { label: 'Delete', onClick: () => handleDeleteFile(fileId) },
       ]
     });
-  }, [files, workspaces, handleDeleteFile, handleCopyFile, handleFileSelect, openRenameFileModal]);
+  }, [files, workspaces, handleDeleteFile, handleCopyFile, handleFileSelect, openRenameFileModal, handleOpenInDefaultApp]);
 
   const handleWorkspaceContextMenu = useCallback((e: React.MouseEvent, workspaceId: string) => {
     e.preventDefault();
@@ -1391,8 +1499,10 @@ export function useAppLogic() {
     handleCreateFolder,
     handleMoveFile,
     handleSaveFile,
+    handleConvertLineEnding,
     handleDeleteFile,
     handleCopyFile,
+    handleOpenInDefaultApp,
     handleWindowFocus,
     handleFileListContextMenu,
     handleWorkspaceContextMenu,

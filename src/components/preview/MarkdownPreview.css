@@ -1,5 +1,13 @@
-.markdown-preview {
+.markdown-preview-container {
   height: 100%;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.markdown-preview {
+  flex: 1;
   overflow-y: auto;
   padding: var(--space-xl) var(--space-2xl);
   background: transparent;
@@ -7,11 +15,175 @@
   font-family: var(--font-ui);
   font-size: var(--font-size-lg);
   line-height: var(--line-height-relaxed);
+  position: relative;
+}
+
+.preview-loading-overlay {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  background: var(--color-surface-elevated);
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+  z-index: 10;
+  animation: fadein 0.3s ease;
+}
+
+@keyframes fadein {
+  from { opacity: 0; transform: translateY(-5px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.preview-manual-refresh-overlay {
+  position: absolute;
+  top: 10px;
+  right: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+  z-index: 10;
+  animation: fadein 0.3s ease;
+}
+
+.preview-refresh-btn {
+  background: var(--color-accent);
+  color: var(--color-bg);
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+  transition: all 0.2s ease;
+}
+
+.preview-refresh-btn:hover {
+  filter: brightness(1.1);
+  transform: translateY(-1px);
+}
+
+.preview-refresh-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  background: var(--color-bg);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.stale-content {
+  opacity: 0.5;
+  filter: grayscale(0.5);
+  transition: all 0.3s ease;
 }
 
 .markdown-preview-inner {
   max-width: 900px;
+  margin: 0;
+}
+
+[data-preview-centered="true"] .editor-content-preview.full .markdown-preview-inner {
   margin: 0 auto;
+}
+
+.preview-block {
+  transition: opacity 0.15s ease;
+  contain: layout paint style;
+  content-visibility: auto;
+}
+
+.preview-block--placeholder {
+  opacity: 0;
+}
+
+.preview-block--rendered {
+  opacity: 1;
+}
+
+/* ── Status Indicator ───────────────────────────── */
+
+.preview-status-indicator {
+  position: absolute;
+  bottom: 20px;
+  right: 20px;
+  background: var(--color-surface-elevated);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  border: 1px solid var(--color-border);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  backdrop-filter: blur(8px);
+  cursor: help;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.preview-status-indicator:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0,0,0,0.2);
+}
+
+.preview-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--color-text-muted);
+}
+.preview-status-dot.active {
+  background: var(--color-accent);
+  box-shadow: 0 0 8px var(--color-accent);
+  animation: pulse 1.5s infinite;
+}
+.preview-status-dot.paused {
+  background: #ffb86c;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.6; }
+  50% { opacity: 1; }
+  100% { opacity: 0.6; }
+}
+
+.preview-status-details {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  right: 0;
+  background: var(--color-surface-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px;
+  width: 240px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.2);
+  display: none;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 21;
+}
+
+.preview-status-indicator:hover .preview-status-details {
+  display: flex;
+}
+
+.status-detail-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+}
+.status-detail-label {
+  color: var(--color-text-muted);
+}
+.status-detail-value {
+  color: var(--color-text-primary);
+  font-family: var(--font-mono);
 }
 
 /* ── Headings ───────────────────────────────────── */
@@ -236,4 +408,59 @@
   max-width: 100%;
   border-radius: var(--radius-md);
   margin: var(--space-sm) 0;
+}
+
+/* ── Pathological Math Protection ───────────────── */
+
+.safe-math-container {
+  max-height: 60vh;
+  max-width: 100%;
+  overflow: auto;
+}
+
+.math-fallback-block {
+  border: 1px solid var(--color-warning);
+  background: var(--color-surface-elevated);
+  border-radius: var(--radius-md);
+  padding: var(--space-md);
+  margin: var(--space-md) 0;
+}
+
+.math-fallback-title {
+  color: var(--color-warning);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-bottom: var(--space-sm);
+}
+
+.math-fallback-source {
+  background: var(--color-bg);
+  padding: var(--space-sm);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 150px;
+  overflow: auto;
+  color: var(--color-text-secondary);
+}
+
+.math-fallback-inline {
+  color: var(--color-warning);
+  background: var(--color-surface-elevated);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  border: 1px solid var(--color-border-subtle);
+  cursor: help;
+}
+
+.safe-math-inline-container {
+  display: inline-block;
+  max-width: 100%;
+  overflow-x: auto;
+  vertical-align: bottom;
 }

@@ -61,6 +61,11 @@ jobs:
           cargo test
           cargo clippy -- -D warnings
 
+      - name: Sync app version from git tag
+        run: node scripts/sync-version-from-tag.mjs
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+
       - name: Build Tauri Installers
         run: npm run tauri:build
         env:
@@ -98,6 +103,8 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
+          name: EXT ${{ github.ref_name }}
+          tag_name: ${{ github.ref_name }}
           files: artifacts/**/*
           generate_release_notes: true
         env:
