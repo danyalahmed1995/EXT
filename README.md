@@ -240,7 +240,12 @@ Available packages:
 - macOS: `.dmg`
 - Linux: `.deb` and AppImage
 
-Unsigned builds may show operating system security warnings. Code signing can be added later.
+### macOS downloads
+
+- Apple Silicon Macs, M1/M2/M3/M4: download the `aarch64.dmg`
+- Intel Macs, Core i5/i7/i9: download the `x86_64.dmg`
+
+The macOS builds are currently unsigned and not notarized, so macOS may block them with a warning. These builds are technical preview builds.
 
 ## Tech stack
 
