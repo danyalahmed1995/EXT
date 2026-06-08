@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, startTransition } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef, startTransition } from 'react';
 import { ViewMode, EditorTab } from '../components/editor/EditorPanel';
 import { ContextMenuItem } from '../components/context-menu/ContextMenu';
 import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
@@ -46,6 +46,7 @@ export function useAppLogic() {
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, items: ContextMenuItem[] } | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [previewKey, setPreviewKey] = useState(0);
+  const pendingOpenFileIds = useRef<Set<string>>(new Set());
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -291,6 +292,9 @@ export function useAppLogic() {
     return result;
   }, [activeView, files, searchQuery, searchGlobal, sortMode, customFileOrder]);
 
+  const filesById = useMemo(() => new Map(files.map((file) => [file.id, file])), [files]);
+  const workspacesById = useMemo(() => new Map(workspaces.map((workspace) => [workspace.id, workspace])), [workspaces]);
+
   const viewTitle = useMemo(() => {
     switch (activeView) {
       case 'recent': return 'Recent';
@@ -339,41 +343,54 @@ export function useAppLogic() {
 
   const handleFileSelect = useCallback(
     (fileId: string) => {
-      setContextMenu(null);
-      setActiveFileId(fileId);
-      if (!openTabs.find((t) => t.id === fileId)) {
-        const file = files.find((f) => f.id === fileId);
-        const workspace = workspaces.find((w) => w.id === file?.workspaceId);
-        if (file && workspace) {
-          
-          // Instantly insert a loading tab so the UI doesn't jump to empty
-          setOpenTabs((tabs) => [
-            ...tabs,
-            {
-              id: file.id,
-              name: file.name,
-              extension: file.extension,
-              content: '',
-              isDirty: false,
-              absolutePath: file.absolutePath,
-              isLoading: true
-            },
-          ]);
-
-          invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
-            // Update the tab with the real content and stop loading spinner
-            startTransition(() => {
-              setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', isLoading: false } : t));
-            });
-          }).catch(() => {
-             startTransition(() => {
-               setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: '', isLoading: false } : t));
-             });
-          });
-        }
+      const alreadyOpen = openTabs.some((t) => t.id === fileId);
+      if (activeFileId === fileId && alreadyOpen) {
+        setContextMenu((prev) => (prev === null ? prev : null));
+        return;
       }
+
+      setContextMenu((prev) => (prev === null ? prev : null));
+      setActiveFileId((prev) => (prev === fileId ? prev : fileId));
+
+      if (alreadyOpen || pendingOpenFileIds.current.has(fileId)) return;
+
+      const file = filesById.get(fileId);
+      const workspace = file ? workspacesById.get(file.workspaceId) : undefined;
+      if (!file || !workspace) return;
+
+      pendingOpenFileIds.current.add(fileId);
+
+      // Instantly insert a loading tab so the UI doesn't jump to empty.
+      setOpenTabs((tabs) => {
+        if (tabs.some((t) => t.id === fileId)) return tabs;
+        return [
+          ...tabs,
+          {
+            id: file.id,
+            name: file.name,
+            extension: file.extension,
+            content: '',
+            isDirty: false,
+            absolutePath: file.absolutePath,
+            isLoading: true
+          },
+        ];
+      });
+
+      invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
+        // Update the tab with the real content and stop loading spinner.
+        startTransition(() => {
+          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', isLoading: false } : t));
+        });
+      }).catch(() => {
+        startTransition(() => {
+          setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: '', isLoading: false } : t));
+        });
+      }).finally(() => {
+        pendingOpenFileIds.current.delete(fileId);
+      });
     },
-    [openTabs, files, workspaces]
+    [activeFileId, openTabs, filesById, workspacesById]
   );
 
   const handleTabClose = useCallback(

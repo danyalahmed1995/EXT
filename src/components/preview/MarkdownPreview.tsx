@@ -2,9 +2,19 @@ import React, { useEffect, useState, useRef, useCallback, useMemo, UIEvent } fro
 import DOMPurify from 'dompurify';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import MarkdownWorker from '../../workers/markdown.worker?worker';
-import { indexBlocks, SourceBlock } from '../../utils/blockIndexer';
+import type { SourceBlock } from '../../utils/blockIndexer';
 import 'katex/dist/katex.min.css';
 import './MarkdownPreview.css';
+
+// --- Global Shared Worker ---
+let globalWorker: Worker | null = null;
+try {
+  globalWorker = new MarkdownWorker();
+} catch {
+  // Worker not available (test environment)
+}
+let globalRenderIdCounter = 0;
+let globalIndexIdCounter = 0;
 
 // ── Constants ────────────────────────────────────────
 
@@ -159,9 +169,17 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   const [blocks, setBlocks] = useState<SourceBlock[]>([]);
   const [isIndexing, setIsIndexing] = useState(true);
 
-  // Math-heavy detection
-  const mathCount = useMemo(() => (content.match(/\$/g) || []).length, [content]);
-  const isHeavy = mathCount > 200 || content.length > 500000;
+  // Math-heavy detection — short-circuit for large files to avoid O(n) regex on 5MB strings during render
+  const isHeavy = useMemo(() => {
+    if (content.length > 500000) return true;
+    // For smaller files, count $ signs efficiently
+    let count = 0;
+    for (let i = 0; i < content.length; i++) {
+      if (content.charCodeAt(i) === 36) count++; // '$' = 36
+      if (count > 200) return true;
+    }
+    return false;
+  }, [content]);
   
   const maxInFlight = isHeavy ? 1 : 4;
 
@@ -175,8 +193,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
 
   // Refs
   const previewRef      = useRef<HTMLDivElement>(null);
-  const workerRef       = useRef<Worker | null>(null);
-  const renderIdRef     = useRef(0);
+  const renderIdRef     = useRef(++globalRenderIdCounter);
   const pendingRef      = useRef(new Set<number>());
   const observerRef     = useRef<IntersectionObserver | null>(null);
   const [observerInstance, setObserverInstance] = useState<IntersectionObserver | null>(null);
@@ -229,24 +246,53 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isActive]);
 
-  // Lifecycle Mounted Status
+  // Lifecycle Mounted Status & Scroll Reset
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Async Indexing
   useEffect(() => {
+    if (previewRef.current) {
+      previewRef.current.scrollTop = 0;
+    }
+  }, [absolutePath]);
+
+  // Async Indexing — runs in the markdown worker so preview never scans a full document on the navigation path.
+  const indexVersionRef = useRef(0);
+  const indexBytesRef = useRef(0);
+  useEffect(() => {
+    const indexId = ++globalIndexIdCounter;
+    indexVersionRef.current = indexId;
+    indexBytesRef.current = content.length;
+    renderIdRef.current = ++globalRenderIdCounter;
+    pendingRef.current.clear();
     setIsIndexing(true);
-    // Defer indexing via setTimeout so the Tab UI can instantly mount the skeleton
-    const timer = setTimeout(() => {
-      if (!isMountedRef.current) return;
-      const result = indexBlocks(content);
-      if (!isMountedRef.current) return;
-      setBlocks(result);
+
+    if (!content) {
+      setBlocks([]);
       setIsIndexing(false);
-    }, 0);
-    return () => clearTimeout(timer);
+      return;
+    }
+
+    if (!globalWorker) {
+      console.warn('[NavigationPerf] preview worker unavailable; skipping async block indexing');
+      setBlocks([]);
+      setIsIndexing(false);
+      return;
+    }
+
+    globalWorker.postMessage({
+      type: 'index-blocks',
+      indexId,
+      content,
+    });
+
+    return () => {
+      if (indexVersionRef.current === indexId) {
+        indexVersionRef.current = ++globalIndexIdCounter;
+      }
+    };
   }, [content]);
 
   const chunks = useMemo(() => {
@@ -301,7 +347,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   const inFlightRef = useRef(new Set<number>());
 
   const pumpWorkerQueue = useCallback(() => {
-    if (!isMountedRef.current || !workerRef.current || !isActiveRef.current) return;
+    if (!isMountedRef.current || !globalWorker || !isActiveRef.current) return;
     
     while (inFlightRef.current.size < maxInFlight && requestQueueRef.current.length > 0) {
       const blockId = requestQueueRef.current.shift()!;
@@ -311,7 +357,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
       if (!block) continue;
       
       inFlightRef.current.add(blockId);
-      workerRef.current.postMessage({
+      globalWorker.postMessage({
         type: 'render-block',
         renderId: renderIdRef.current,
         blockId,
@@ -476,10 +522,46 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
   }, [isActive, isEditorFocused, processPurifyQueue, evaluateVisibleBlocks, pumpWorkerQueue, isFastScrolling]);
 
   /* ── Lifecycle & Workers ─────────────────────── */
+  const onMessageRef = useRef<((e: MessageEvent) => void) | null>(null);
+
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      const { type, indexId, blocks, indexMs, error } = e.data;
+      if (type === 'index-result' || type === 'index-error') {
+        if (!isMountedRef.current || indexId !== indexVersionRef.current) {
+          const navPerf = (window as any).__NAV_PERF;
+          if (navPerf) navPerf.staleJobsDiscarded = (navPerf.staleJobsDiscarded || 0) + 1;
+          console.log(`[NavigationPerf] stale preview index discarded: ${indexId}`);
+          return;
+        }
+
+        if (type === 'index-error') {
+          console.error('Preview index error:', error);
+          setBlocks([]);
+          setIsIndexing(false);
+          return;
+        }
+
+        if (indexMs > 16) {
+          console.log(
+            `[NavigationPerf] preview index worker: worker=${indexMs.toFixed(1)}ms blocks=${blocks.length} size=${(indexBytesRef.current / 1024).toFixed(0)}KB`,
+          );
+        }
+        setBlocks(blocks);
+        setIsIndexing(false);
+        return;
+      }
+
+      onMessageRef.current?.(e);
+    };
+    globalWorker?.addEventListener('message', handler);
+    return () => globalWorker?.removeEventListener('message', handler);
+  }, []);
+
   useEffect(() => {
     if (blocks.length === 0) return;
 
-    renderIdRef.current += 1;
+    renderIdRef.current = ++globalRenderIdCounter;
     pendingRef.current.clear();
     setPendingCount(0);
     renderedRef.current.clear();
@@ -493,11 +575,7 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
     setIsManualMode(isHeavy);
     setHasStartedRender(!isHeavy);
 
-    workerRef.current?.terminate();
-    const w = new MarkdownWorker();
-    workerRef.current = w;
-
-    w.onmessage = (e: MessageEvent) => {
+    onMessageRef.current = (e: MessageEvent) => {
       if (!isMountedRef.current) return;
       const { type, renderId, blockId, html, error } = e.data;
       if (renderId !== renderIdRef.current) return;
@@ -522,7 +600,6 @@ export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ con
     };
 
     return () => { 
-      w.terminate(); 
       purifyQueueRef.current = [];
       requestQueueRef.current = [];
       inFlightRef.current.clear();

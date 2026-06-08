@@ -86,7 +86,7 @@
   margin: 0;
 }
 
-[data-preview-centered="true"] .markdown-preview-inner {
+[data-preview-centered="true"] .editor-content-preview.full .markdown-preview-inner {
   margin: 0 auto;
 }
 

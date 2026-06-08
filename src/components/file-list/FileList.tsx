@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useSortable, SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import {
@@ -119,8 +119,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
     if (isActive) {
       const el = document.getElementById(`file-item-${id}`);
       if (el) {
-        el.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-        el.focus({ preventScroll: true });
+        el.scrollIntoView({ behavior: 'auto', block: 'nearest' });
       }
     }
   }, [isActive, id]);
@@ -210,6 +209,30 @@ export const FileList: React.FC<FileListProps> = React.memo(({
   onBulkDeleteFiles,
 }) => {
   const [showSortMenu, setShowSortMenu] = useState(false);
+  const keyboardSelectFrame = useRef<number | null>(null);
+  const pendingKeyboardFileId = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (keyboardSelectFrame.current != null) {
+        cancelAnimationFrame(keyboardSelectFrame.current);
+      }
+    };
+  }, []);
+
+  const scheduleKeyboardFileSelect = useCallback((fileId: string) => {
+    pendingKeyboardFileId.current = fileId;
+    if (keyboardSelectFrame.current != null) return;
+
+    keyboardSelectFrame.current = requestAnimationFrame(() => {
+      keyboardSelectFrame.current = null;
+      const nextFileId = pendingKeyboardFileId.current;
+      pendingKeyboardFileId.current = null;
+      if (nextFileId) {
+        onFileSelect(nextFileId);
+      }
+    });
+  }, [onFileSelect]);
 
   const sortLabel = {
     'date-desc': 'Date (Newest)',
@@ -239,13 +262,13 @@ export const FileList: React.FC<FileListProps> = React.memo(({
       if (files.length === 0) return;
 
       const currentIndex = files.findIndex(f => f.id === activeFileId);
-      
-      if (e.key === 'ArrowDown') {
-        const nextIndex = currentIndex < 0 ? 0 : Math.min(currentIndex + 1, files.length - 1);
-        onFileSelect(files[nextIndex].id);
-      } else if (e.key === 'ArrowUp') {
-        const prevIndex = currentIndex <= 0 ? 0 : currentIndex - 1;
-        onFileSelect(files[prevIndex].id);
+      const nextIndex = e.key === 'ArrowDown'
+        ? (currentIndex < 0 ? 0 : Math.min(currentIndex + 1, files.length - 1))
+        : (currentIndex <= 0 ? 0 : currentIndex - 1);
+      const nextFileId = files[nextIndex]?.id;
+
+      if (nextFileId && nextFileId !== activeFileId) {
+        scheduleKeyboardFileSelect(nextFileId);
       }
     }
   };
