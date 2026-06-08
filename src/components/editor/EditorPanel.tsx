@@ -16,6 +16,7 @@ import {
 } from '../../icons/icons';
 import { MarkdownPreview } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
+import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
@@ -33,6 +34,7 @@ export interface EditorTab {
   saveStatus?: 'saving' | 'saved' | 'error' | 'unsaved';
   absolutePath: string;
   isLoading?: boolean;
+  lineEnding?: LineEnding;
 }
 
 interface EditorPanelProps {
@@ -44,6 +46,7 @@ interface EditorPanelProps {
   onTabClose: (tabId: string) => void;
   onContentChange: (tabId: string, content: string) => void;
   onSaveFile: (tabId: string) => void;
+  onConvertLineEnding: (tabId: string, target: ConvertibleLineEnding) => void;
   onNewFile: () => void;
   onOpenSettings: () => void;
   previewKey?: number;
@@ -130,12 +133,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onTabClose,
   onContentChange,
   onSaveFile,
+  onConvertLineEnding,
   onNewFile,
   onOpenSettings,
   previewKey,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
   const [hotEditorTabIds, setHotEditorTabIds] = React.useState<string[]>(() => activeTabId ? [activeTabId] : []);
+  const [showLineEndingMenu, setShowLineEndingMenu] = React.useState(false);
 
   React.useEffect(() => {
     if (!activeTabId) return;
@@ -159,6 +164,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         el.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
       }
     }
+  }, [activeTabId]);
+
+  React.useEffect(() => {
+    setShowLineEndingMenu(false);
   }, [activeTabId]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -259,6 +268,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     };
   }, [activeTab?.id, activeTab?.content]);
   const charCount = activeTab?.content ? activeTab.content.length : 0;
+  const lineEndingLabel = activeTab?.lineEnding ?? 'LF';
 
   if (!activeTab) {
     return (
@@ -461,6 +471,40 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           {activeTab.extension.replace('.', '').toUpperCase()}
         </span>
         <span className="editor-statusbar-item">UTF-8</span>
+        <div className="editor-statusbar-line-ending">
+          <button
+            className="editor-statusbar-button"
+            onClick={() => setShowLineEndingMenu((open) => !open)}
+            title="Change line endings"
+            type="button"
+          >
+            {lineEndingLabel}
+          </button>
+          {showLineEndingMenu && (
+            <div className="editor-statusbar-menu">
+              <button
+                type="button"
+                className="editor-statusbar-menu-item"
+                onClick={() => {
+                  onConvertLineEnding(activeTab.id, 'LF');
+                  setShowLineEndingMenu(false);
+                }}
+              >
+                Convert to LF
+              </button>
+              <button
+                type="button"
+                className="editor-statusbar-menu-item"
+                onClick={() => {
+                  onConvertLineEnding(activeTab.id, 'CRLF');
+                  setShowLineEndingMenu(false);
+                }}
+              >
+                Convert to CRLF
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </div>
     </React.Profiler>

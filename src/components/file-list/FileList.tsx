@@ -20,6 +20,7 @@ interface FileListFile {
   extension: string;
   workspace: string;
   absolutePath: string;
+  relativePath?: string;
   modifiedAt: string;
   isFavorite: boolean;
   size: number;
@@ -77,6 +78,7 @@ interface FileListItemProps {
   extension: string;
   workspace: string;
   absolutePath: string;
+  relativePath?: string;
   modifiedAt: string;
   isFavorite: boolean;
   isActive: boolean;
@@ -93,6 +95,8 @@ const FileListItem: React.FC<FileListItemProps> = ({
   name,
   extension,
   workspace,
+  absolutePath,
+  relativePath,
   modifiedAt,
   isFavorite,
   isActive,
@@ -124,6 +128,19 @@ const FileListItem: React.FC<FileListItemProps> = ({
     }
   }, [isActive, id]);
 
+  const pathHint = React.useMemo(() => {
+    if (relativePath && relativePath !== name) {
+      const normalized = relativePath.replace(/\\/g, '/');
+      const folder = normalized.split('/').slice(0, -1).join('/');
+      if (folder) return folder;
+    }
+
+    const normalizedAbsolute = absolutePath.replace(/\\/g, '/');
+    const parent = normalizedAbsolute.split('/').slice(0, -1).join('/');
+    const parts = parent.split('/').filter(Boolean);
+    return parts.slice(-3).join('/') || workspace;
+  }, [absolutePath, name, relativePath, workspace]);
+
   return (
     <div
       id={`file-item-${id}`}
@@ -134,6 +151,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
       className={`file-list-item ${isActive ? 'active' : ''}`}
       onClick={onSelect}
       onContextMenu={onContextMenu}
+      title={absolutePath}
     >
       <span 
         className="file-list-item-icon"
@@ -144,7 +162,7 @@ const FileListItem: React.FC<FileListItemProps> = ({
       <div className="file-list-item-content">
         <span className="file-list-item-name">{name}</span>
         <div className="file-list-item-meta">
-          <span className="file-list-item-workspace">{workspace}</span>
+          <span className="file-list-item-workspace" title={absolutePath}>{pathHint}</span>
           <span className="file-list-item-ext">{extension}</span>
         </div>
       </div>
@@ -309,6 +327,7 @@ export const FileList: React.FC<FileListProps> = React.memo(({
                 extension={file.extension}
                 workspace={file.workspace}
                 absolutePath={file.absolutePath}
+                relativePath={file.relativePath}
                 modifiedAt={file.modifiedAt}
                 isFavorite={file.isFavorite}
                 isActive={file.id === activeFileId}

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { AppShell } from './components/layout/AppShell';
 import { Sidebar } from './components/sidebar/Sidebar';
 import { FileList } from './components/file-list/FileList';
@@ -18,6 +18,7 @@ function App() {
 
   const [isProfiling, setIsProfiling] = useState(false);
   const [profileResults, setProfileResults] = useState<string | null>(null);
+  const [isSidebarVisible, setIsSidebarVisible] = useState(true);
 
   const {
   activeView,
@@ -49,6 +50,7 @@ function App() {
   handleFileSelect,
   handleTabClose,
   handleContentChange,
+  handleConvertLineEnding,
   handleToggleFavorite,
   handleAddFolder,
   handleRemoveAllWorkspaces,
@@ -76,6 +78,17 @@ function App() {
   const activeTabMemo = useMemo(() => openTabs.find(t => t.id === activeFileId), [openTabs, activeFileId]);
   const activeFileContent = activeTabMemo?.content;
   const activeFileExtension = activeTabMemo?.extension;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'b') return;
+      e.preventDefault();
+      setIsSidebarVisible((visible) => !visible);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   // ── Run Profile Automation ────────────────────────
   const runProfile = async () => {
@@ -178,6 +191,7 @@ function App() {
     >
       <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={handleDragEnd}>
         <AppShell
+          isSidebarVisible={isSidebarVisible}
           sidebar={
           <Sidebar
             workspaces={workspaces}
@@ -207,6 +221,7 @@ function App() {
               extension: f.extension,
               workspace: f.workspace,
               absolutePath: f.absolutePath,
+              relativePath: f.relativePath,
               modifiedAt: f.modifiedAt,
               isFavorite: f.isFavorite,
               size: f.size,
@@ -233,6 +248,7 @@ function App() {
             onTabSelect={setActiveFileId}
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
+            onConvertLineEnding={handleConvertLineEnding}
             onSaveFile={handleSaveFile}
             onNewFile={() => setShowNewFileModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}

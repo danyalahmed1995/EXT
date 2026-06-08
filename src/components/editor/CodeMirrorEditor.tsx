@@ -307,7 +307,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
 
     const cachedContent = contentCache.current.get(activeTabId);
     const hasPendingLocalChange = pendingChangeTimers.current.has(activeTabId);
-    if (!hasPendingLocalChange && cachedContent !== content && !view.hasFocus) {
+    if (!hasPendingLocalChange && cachedContent !== content) {
       const nextState = createEditorState(activeTabId, content);
       const setStateStart = performance.now();
       view.setState(nextState);
@@ -362,6 +362,26 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       viewRef.current?.requestMeasure();
     });
     return () => cancelAnimationFrame(rafId);
+  }, [isActive]);
+
+  useEffect(() => {
+    const handleFocusActiveEditor = () => {
+      if (isActive) viewRef.current?.focus();
+    };
+
+    window.addEventListener('editor-focus-active', handleFocusActiveEditor);
+    return () => window.removeEventListener('editor-focus-active', handleFocusActiveEditor);
+  }, [isActive]);
+
+  useEffect(() => {
+    const handleReadActiveContent = (event: Event) => {
+      if (!isActive || !viewRef.current) return;
+      const customEvent = event as CustomEvent<{ content?: string }>;
+      customEvent.detail.content = viewRef.current.state.doc.toString();
+    };
+
+    window.addEventListener('editor-read-active-content', handleReadActiveContent);
+    return () => window.removeEventListener('editor-read-active-content', handleReadActiveContent);
   }, [isActive]);
 
   useEffect(() => {
