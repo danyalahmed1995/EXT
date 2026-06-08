@@ -4,7 +4,7 @@ import { indexBlocks } from '../utils/blockIndexer';
 const markdownItKatex = (markdownItKatexPkg as any).default || markdownItKatexPkg;
 
 const md = markdownit({
-  html: false,         // Disable raw HTML for security
+  html: true,          // Allow README-style HTML; preview sanitizes before DOM insertion
   linkify: true,       // Auto-convert URLs to links
   typographer: true,   // Smart quotes, dashes, etc.
   breaks: true,        // Convert \n to <br>
