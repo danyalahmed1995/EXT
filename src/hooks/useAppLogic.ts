@@ -154,8 +154,8 @@ export function useAppLogic() {
                 path: ws.path,
                 workspaceId: ws.id,
                 workspaceName: ws.name,
-                ignoredDirs: appearanceRef.current.ignoredDirs,
-              });              
+                ignoredDirs: storedAppearance.ignoredDirs,
+              });
               // Apply favorite status
               const scannedWithFavs = result.files.map(f => ({
                 ...f,
@@ -1219,7 +1219,8 @@ export function useAppLogic() {
               workspaceId: ws.id,
               workspaceName: ws.name,
               ignoredDirs: appearanceRef.current.ignoredDirs,
-            });            const scannedWithFavs = result.files.map(f => ({
+            });
+            const scannedWithFavs = result.files.map(f => ({
               ...f,
               isFavorite: storedFavs.includes(f.id) || storedFavs.includes(f.relativePath),
             }));
