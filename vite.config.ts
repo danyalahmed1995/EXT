@@ -1,13 +1,25 @@
 /// <reference types="vitest" />
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import { rm } from "node:fs/promises";
+import { resolve } from "node:path";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+const excludeDocsDemoAssets = () => ({
+  name: "exclude-docs-demo-assets",
+  apply: "build" as const,
+  closeBundle: async () => {
+    await rm(resolve("dist", "demo-example"), { recursive: true, force: true });
+    await rm(resolve("dist", "tauri.svg"), { force: true });
+    await rm(resolve("dist", "vite.svg"), { force: true });
+  },
+});
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [react()],
+  plugins: [react(), excludeDocsDemoAssets()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
