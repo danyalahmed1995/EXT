@@ -63,6 +63,7 @@ function App() {
   handleRenameFile,
   handleRenameWorkspace,
   handleSaveFile,
+  handleLargeFileStateChange,
   handleDeleteFile,
   handleCopyFile,
   handleFileListContextMenu,
@@ -76,7 +77,7 @@ function App() {
 
   // Memoize active file content/extension for Sidebar to prevent re-renders
   const activeTabMemo = useMemo(() => openTabs.find(t => t.id === activeFileId), [openTabs, activeFileId]);
-  const activeFileContent = activeTabMemo?.content;
+  const activeFileContent = activeTabMemo?.isLargeFile ? undefined : activeTabMemo?.content;
   const activeFileExtension = activeTabMemo?.extension;
 
   useEffect(() => {
@@ -248,6 +249,7 @@ function App() {
             onTabSelect={setActiveFileId}
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
+            onLargeFileStateChange={handleLargeFileStateChange}
             onConvertLineEnding={handleConvertLineEnding}
             onSaveFile={handleSaveFile}
             onNewFile={() => setShowNewFileModal(true)}

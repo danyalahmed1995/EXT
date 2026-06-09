@@ -17,6 +17,10 @@ import {
 import { MarkdownPreview } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
 import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
+import type { LargeFileMetadata } from '../../utils/largeFile';
+import type { LargeFileSessionState } from '../../utils/largeFile';
+import { formatBytes } from '../../utils/largeFile';
+import { LargeFileModePanel } from './LargeFileModePanel';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
@@ -35,6 +39,11 @@ export interface EditorTab {
   absolutePath: string;
   isLoading?: boolean;
   lineEnding?: LineEnding;
+  isLargeFile?: boolean;
+  largeFileMetadata?: LargeFileMetadata;
+  largeFileState?: LargeFileSessionState;
+  workspacePath?: string;
+  relativePath?: string;
 }
 
 interface EditorPanelProps {
@@ -46,6 +55,7 @@ interface EditorPanelProps {
   onTabClose: (tabId: string) => void;
   onContentChange: (tabId: string, content: string) => void;
   onSaveFile: (tabId: string) => void;
+  onLargeFileStateChange?: (tabId: string, state: LargeFileSessionState, isDirty: boolean) => void;
   onConvertLineEnding: (tabId: string, target: ConvertibleLineEnding) => void;
   onNewFile: () => void;
   onOpenSettings: () => void;
@@ -108,6 +118,7 @@ const SortableTab: React.FC<SortableTabProps> = ({ tab, isActive, onSelect, onCl
           <UnsavedDot size={7} />
         </span>
       )}
+      {tab.isLargeFile && <span className="editor-tab-large">Large</span>}
       <button
         className="editor-tab-close"
         onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on close button
@@ -133,6 +144,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onTabClose,
   onContentChange,
   onSaveFile,
+  onLargeFileStateChange,
   onConvertLineEnding,
   onNewFile,
   onOpenSettings,
@@ -209,6 +221,11 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
   const [lineCount, setLineCount] = React.useState<number | null>(null);
   React.useEffect(() => {
+    if (activeTab?.isLargeFile) {
+      setLineCount(null);
+      return;
+    }
+
     const content = activeTab?.content ?? '';
     if (!content) {
       setLineCount(0);
@@ -267,7 +284,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       if (scheduledId) cancel(scheduledId);
     };
   }, [activeTab?.id, activeTab?.content]);
-  const charCount = activeTab?.content ? activeTab.content.length : 0;
+  const charCount = activeTab?.isLargeFile ? activeTab.largeFileMetadata?.size ?? 0 : activeTab?.content ? activeTab.content.length : 0;
   const lineEndingLabel = activeTab?.lineEnding ?? 'LF';
 
   if (!activeTab) {
@@ -406,6 +423,17 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
            <span>Loading massive file...</span>
         </div>
+      ) : activeTab.isLargeFile && activeTab.largeFileMetadata ? (
+        <div className="editor-content">
+          <LargeFileModePanel
+            tabId={activeTab.id}
+            workspacePath={activeTab.workspacePath}
+            relativePath={activeTab.relativePath}
+            metadata={activeTab.largeFileMetadata}
+            state={activeTab.largeFileState}
+            onStateChange={(state, isDirty) => onLargeFileStateChange?.(activeTab.id, state, isDirty)}
+          />
+        </div>
       ) : (
       <div className="editor-content" style={{ position: 'relative' }} onContextMenuCapture={handleContextMenu}>
         <div 
@@ -461,10 +489,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <span className="editor-statusbar-item">
           <span className="editor-statusbar-accent">{activeTab.name}</span>
         </span>
-        <span className="editor-statusbar-item">{lineCount == null ? '...' : lineCount} lines</span>
-        <span className="editor-statusbar-item">{charCount} chars</span>
+        <span className="editor-statusbar-item">{activeTab.isLargeFile ? 'Outline deferred' : `${lineCount == null ? '...' : lineCount} lines`}</span>
+        <span className="editor-statusbar-item">{activeTab.isLargeFile ? formatBytes(charCount) : `${charCount} chars`}</span>
         <span className="editor-statusbar-item" style={{ color: activeTab.saveStatus === 'error' ? 'var(--color-error)' : activeTab.saveStatus === 'saving' ? 'var(--color-accent)' : activeTab.isDirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-          {activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
+          {activeTab.isLargeFile ? activeTab.isDirty ? 'Large file edits pending' : 'Chunked large file' : activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
         </span>
         <div className="editor-statusbar-spacer" />
         <span className="editor-statusbar-item">

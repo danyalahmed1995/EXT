@@ -4,6 +4,8 @@ node_modules/
 
 Benchmark Files/report/
 
+Benchmark Files/ext-1-gig-md-pack/
+
 # Frontend build output
 dist/
 build/
