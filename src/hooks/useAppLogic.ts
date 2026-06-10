@@ -27,6 +27,27 @@ export function useAppLogic() {
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set());
   const [selectedWorkspaces, setSelectedWorkspaces] = useState<Set<string>>(new Set());
   
+  const defaultIgnoredDirs = [
+    ".git",
+    "node_modules",
+    "dist",
+    "build",
+    "target",
+    ".next",
+    "out",
+    "coverage",
+    "vendor",
+    "Library",
+    "Temp",
+    "tmp",
+    ".cache",
+    ".turbo",
+    ".venv",
+    "venv",
+    "bin",
+    "obj",
+  ];
+
   // Settings State
   const [appearance, setAppearance] = useState<AppearanceSettings>({
     animations: true,
@@ -36,9 +57,13 @@ export function useAppLogic() {
     editorFocus: true,
     previewTransitions: true,
     reduceMotion: false,
+    ignoredDirs: defaultIgnoredDirs,
     enableProfiler: false,
     previewCentered: false,
   });
+
+  const appearanceRef = useRef(appearance);
+  appearanceRef.current = appearance;
 
   // UI State
   const [searchQuery, setSearchQuery] = useState('');
@@ -129,10 +154,14 @@ export function useAppLogic() {
           editorFocus: true,
           previewTransitions: true,
           reduceMotion: window.matchMedia ? window.matchMedia('(prefers-reduced-motion: reduce)').matches : false,
+          ignoredDirs: defaultIgnoredDirs,
           enableProfiler: false,
           previewCentered: false,
         };
         const storedAppearance: AppearanceSettings = JSON.parse(localStorage.getItem('ext_appearance') || 'null') || defaultAppearance;
+        if (!storedAppearance.ignoredDirs || !Array.isArray(storedAppearance.ignoredDirs)) {
+          storedAppearance.ignoredDirs = defaultIgnoredDirs;
+        }
         
         setWorkspaces(storedWorkspaces);
         setSortMode(storedSortMode);
@@ -149,8 +178,8 @@ export function useAppLogic() {
                 path: ws.path,
                 workspaceId: ws.id,
                 workspaceName: ws.name,
+                ignoredDirs: storedAppearance.ignoredDirs,
               });
-              
               // Apply favorite status
               const scannedWithFavs = result.files.map(f => ({
                 ...f,
@@ -591,6 +620,7 @@ export function useAppLogic() {
         path: selectedPath,
         workspaceId: newId,
         workspaceName: name,
+        ignoredDirs: appearanceRef.current.ignoredDirs,
       });
 
       const newWorkspace: Workspace = {
@@ -618,6 +648,7 @@ export function useAppLogic() {
         path: selectedPath,
         workspaceId: newId,
         workspaceName: name,
+        ignoredDirs: appearanceRef.current.ignoredDirs,
       });
 
       const newWorkspace: Workspace = {
@@ -1280,6 +1311,7 @@ export function useAppLogic() {
               path: ws.path,
               workspaceId: ws.id,
               workspaceName: ws.name,
+              ignoredDirs: appearanceRef.current.ignoredDirs,
             });
             const scannedWithFavs = result.files.map(f => ({
               ...f,

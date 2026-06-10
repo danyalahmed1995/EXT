@@ -66,9 +66,6 @@ A quick look at EXT in motion:
 ![EXT Demo Part 3](./public/demo-example/demo_part3.gif)
 ![EXT Demo Part 4](./public/demo-example/demo_part4.gif)
 ![EXT Demo Part 5](./public/demo-example/demo_part5.gif)
-![EXT Demo Part 6](./public/demo-example/demo_part6.gif)
-![EXT Demo Part 7](./public/demo-example/demo_part7.gif)
-![EXT Demo Part 8](./public/demo-example/demo_part8.gif)
 
 Demo media lives in the repository for README and development use. Production builds strip demo media and development examples from the packaged app.
 
