@@ -255,6 +255,7 @@ function App() {
             onNewFile={() => setShowNewFileModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
             previewKey={previewKey}
+            showLargeFileDetails={appearance.largeFileMode.showDetailsPanel}
           />
         }
       />

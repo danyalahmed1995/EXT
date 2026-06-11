@@ -12,8 +12,10 @@ use tauri::{
 use walkdir::WalkDir;
 
 const LARGE_FILE_MODE_THRESHOLD_BYTES: u64 = 100 * 1024 * 1024;
+const NORMAL_EDITOR_HARD_LIMIT_BYTES: u64 = 100 * 1024 * 1024;
 const DEFAULT_CHUNK_BYTES: u64 = 1024 * 1024;
 const MAX_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
+const SAVE_PROGRESS_EMIT_BYTES: u64 = 16 * 1024 * 1024;
 
 fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBuf, String> {
     let root = Path::new(workspace_path);
@@ -118,6 +120,15 @@ pub struct LargeFileSaveResult {
     pub size: u64,
     pub patch_count: usize,
     pub backup_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LargeFileSaveProgress {
+    pub request_id: String,
+    pub written_bytes: u64,
+    pub total_bytes: u64,
+    pub phase: String,
 }
 
 fn detect_newline_style(text: &str) -> String {
@@ -478,7 +489,11 @@ fn get_file_metadata(workspace_path: String, relative_path: String) -> Result<Fi
 }
 
 #[tauri::command]
-fn read_file(workspace_path: String, relative_path: String) -> Result<String, String> {
+fn read_file(
+    workspace_path: String,
+    relative_path: String,
+    allow_large_file_read: Option<bool>,
+) -> Result<String, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
 
     if !file_path.exists() {
@@ -492,9 +507,15 @@ fn read_file(workspace_path: String, relative_path: String) -> Result<String, St
         metadata.len()
     );
 
-    if metadata.len() > LARGE_FILE_MODE_THRESHOLD_BYTES {
+    if metadata.len() > LARGE_FILE_MODE_THRESHOLD_BYTES && !allow_large_file_read.unwrap_or(false) {
         return Err(format!(
-            "File is {} bytes and must be opened in Large File Mode",
+            "File is {} bytes and must be opened with the streaming text editor",
+            metadata.len()
+        ));
+    }
+    if metadata.len() > NORMAL_EDITOR_HARD_LIMIT_BYTES {
+        return Err(format!(
+            "File is {} bytes and exceeds the normal editor hard limit",
             metadata.len()
         ));
     }
@@ -611,8 +632,9 @@ fn search_file_chunk(
     let mut line_number = line_offset;
     let mut byte_cursor = chunk.offset;
 
-    for line in chunk.text.lines() {
+    for segment in chunk.text.split_inclusive('\n') {
         line_number += 1;
+        let line = segment.trim_end_matches(&['\r', '\n'][..]);
         if matches.len() < max_results && line.to_lowercase().contains(&query_lower) {
             let preview: String = line.chars().take(240).collect();
             matches.push(SearchMatch {
@@ -621,7 +643,7 @@ fn search_file_chunk(
                 preview,
             });
         }
-        byte_cursor += line.len() as u64 + 1;
+        byte_cursor += segment.len() as u64;
     }
 
     Ok(SearchChunkResult {
@@ -638,6 +660,7 @@ fn stream_copy_range(
     target: &mut File,
     from: u64,
     to: u64,
+    progress: &mut impl FnMut(u64) -> Result<(), String>,
 ) -> Result<(), String> {
     if to <= from {
         return Ok(());
@@ -660,17 +683,40 @@ fn stream_copy_range(
         target
             .write_all(&buffer[..n])
             .map_err(|e| format!("Failed to write temp file: {}", e))?;
+        progress(n as u64)?;
         remaining -= n as u64;
     }
 
     Ok(())
 }
 
+fn emit_large_file_save_progress(
+    app: &tauri::AppHandle,
+    request_id: &Option<String>,
+    written_bytes: u64,
+    total_bytes: u64,
+    phase: &str,
+) {
+    if let Some(id) = request_id {
+        let _ = app.emit(
+            "large-file-save-progress",
+            LargeFileSaveProgress {
+                request_id: id.clone(),
+                written_bytes,
+                total_bytes,
+                phase: phase.to_string(),
+            },
+        );
+    }
+}
+
 #[tauri::command]
 fn save_large_file_patches(
+    app: tauri::AppHandle,
     workspace_path: String,
     relative_path: String,
     patches: Vec<LargeFilePatch>,
+    request_id: Option<String>,
 ) -> Result<LargeFileSaveResult, String> {
     let started_at = std::time::Instant::now();
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
@@ -736,16 +782,48 @@ fn save_large_file_patches(
 
     let mut source = File::open(&file_path).map_err(|e| format!("Failed to open source: {}", e))?;
     let mut target = File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let replaced_bytes = sorted_patches
+        .iter()
+        .map(|patch| patch.end.saturating_sub(patch.start))
+        .sum::<u64>();
+    let inserted_bytes = sorted_patches
+        .iter()
+        .map(|patch| patch.text.as_bytes().len() as u64)
+        .sum::<u64>();
+    let total_output_bytes = file_size
+        .saturating_sub(replaced_bytes)
+        .saturating_add(inserted_bytes);
+    let mut written_bytes = 0_u64;
+    let mut last_progress_emit = 0_u64;
+    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Preparing");
+
+    let mut report_progress = |bytes: u64| -> Result<(), String> {
+        written_bytes = written_bytes.saturating_add(bytes);
+        if written_bytes.saturating_sub(last_progress_emit) >= SAVE_PROGRESS_EMIT_BYTES
+            || written_bytes >= total_output_bytes
+        {
+            last_progress_emit = written_bytes;
+            emit_large_file_save_progress(
+                &app,
+                &request_id,
+                written_bytes.min(total_output_bytes),
+                total_output_bytes,
+                "Writing",
+            );
+        }
+        Ok(())
+    };
 
     let mut cursor = 0;
     for patch in &sorted_patches {
-        stream_copy_range(&mut source, &mut target, cursor, patch.start)?;
+        stream_copy_range(&mut source, &mut target, cursor, patch.start, &mut report_progress)?;
         target
             .write_all(patch.text.as_bytes())
             .map_err(|e| format!("Failed to write patch: {}", e))?;
+        report_progress(patch.text.as_bytes().len() as u64)?;
         cursor = patch.end;
     }
-    stream_copy_range(&mut source, &mut target, cursor, file_size)?;
+    stream_copy_range(&mut source, &mut target, cursor, file_size, &mut report_progress)?;
     target
         .flush()
         .map_err(|e| format!("Failed to flush temp file: {}", e))?;
@@ -757,11 +835,13 @@ fn save_large_file_patches(
 
     fs::rename(&file_path, &backup_path)
         .map_err(|e| format!("Failed to create backup before replace: {}", e))?;
+    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Replacing");
 
     if let Err(e) = fs::rename(&temp_path, &file_path) {
         let _ = fs::rename(&backup_path, &file_path);
         return Err(format!("Failed to replace original file; backup restored: {}", e));
     }
+    emit_large_file_save_progress(&app, &request_id, total_output_bytes, total_output_bytes, "Complete");
 
     let new_size = fs::metadata(&file_path)
         .map_err(|e| format!("Failed to read saved metadata: {}", e))?

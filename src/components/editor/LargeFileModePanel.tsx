@@ -8,6 +8,7 @@ import type {
   LargeFileSessionState,
 } from '../../utils/largeFile';
 import { formatBytes } from '../../utils/largeFile';
+import { safeListen } from '../../utils/tauriEvents';
 
 interface LargeFileModePanelProps {
   tabId: string;
@@ -15,6 +16,7 @@ interface LargeFileModePanelProps {
   relativePath?: string;
   metadata: LargeFileMetadata;
   state?: LargeFileSessionState;
+  showDetailsPanel?: boolean;
   onStateChange?: (state: LargeFileSessionState, isDirty: boolean) => void;
 }
 
@@ -46,14 +48,24 @@ interface SaveResult {
   backupPath?: string;
 }
 
-const CHUNK_BYTES = 256 * 1024;
+interface SaveProgressEvent {
+  requestId: string;
+  writtenBytes: number;
+  totalBytes: number;
+  phase: string;
+}
+
+const CHUNK_BYTES = 96 * 1024;
 const SEARCH_CHUNK_BYTES = 2 * 1024 * 1024;
 const MAX_VISIBLE_RESULTS = 200;
+const MAX_CHUNK_CACHE_ENTRIES = 5;
+const EDIT_SYNC_DEBOUNCE_MS = 350;
 
 function createInitialState(): LargeFileSessionState {
   return {
     currentOffset: 0,
     patches: [],
+    chunkCache: [],
     searchResults: [],
     scannedBytes: 0,
     status: 'Ready.',
@@ -68,12 +80,37 @@ function patchId(start: number, end: number): string {
   return `${start}-${end}`;
 }
 
+function applyPatchToChunk(chunk: LargeFileChunkState, patches: LargeFilePatch[]): LargeFileChunkState {
+  const patch = patches.find((candidate) => candidate.start === chunk.offset && candidate.end === chunk.endOffset);
+  return patch ? { ...chunk, text: patch.text } : chunk;
+}
+
+function updateChunkCache(cache: LargeFileChunkState[] | undefined, chunk: LargeFileChunkState): LargeFileChunkState[] {
+  const cleanChunk = { ...chunk, text: chunk.originalText };
+  const next = [
+    cleanChunk,
+    ...(cache ?? []).filter((cached) => !(cached.offset === cleanChunk.offset && cached.endOffset === cleanChunk.endOffset)),
+  ];
+  return next.slice(0, MAX_CHUNK_CACHE_ENTRIES);
+}
+
+function isSameChunk(a?: LargeFileChunkState, b?: LargeFileChunkState): boolean {
+  return Boolean(a && b && a.offset === b.offset && a.endOffset === b.endOffset && a.loadedAt === b.loadedAt);
+}
+
+function normalizeChunkOffset(offset: number, fileSize: number): number {
+  if (fileSize <= 0) return 0;
+  const clamped = Math.max(0, Math.min(offset, fileSize - 1));
+  return Math.floor(clamped / CHUNK_BYTES) * CHUNK_BYTES;
+}
+
 export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
   tabId,
   workspacePath,
   relativePath,
   metadata,
   state,
+  showDetailsPanel = true,
   onStateChange,
 }) => {
   const session = state ?? createInitialState();
@@ -82,10 +119,19 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
   const [isLoadingChunk, setIsLoadingChunk] = React.useState(false);
   const [isSearching, setIsSearching] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
+  const [saveProgress, setSaveProgress] = React.useState<SaveProgressEvent | null>(null);
   const cancelSearchRef = React.useRef(false);
   const cancelIndexRef = React.useRef(false);
   const loadingRef = React.useRef(0);
+  const searchRef = React.useRef(0);
+  const saveRequestRef = React.useRef<string | null>(null);
   const sessionRef = React.useRef(session);
+  const editorRef = React.useRef<HTMLTextAreaElement | null>(null);
+  const draftTextRef = React.useRef('');
+  const editSyncTimerRef = React.useRef<number | null>(null);
+  const lastRenderMarkRef = React.useRef<number | null>(null);
+  const renderedChunkRef = React.useRef<LargeFileChunkState | undefined>(undefined);
+  const lastInteractionRef = React.useRef(Date.now());
 
   React.useEffect(() => {
     sessionRef.current = session;
@@ -93,11 +139,13 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
 
   const currentChunk = session.chunk;
   const currentText = currentChunk?.text ?? '';
+  const fileSize = session.fileSize ?? metadata.size;
+  const modifiedAt = session.modifiedAt ?? metadata.modifiedAt;
   const isCurrentChunkDirty = Boolean(
     currentChunk && currentChunk.text !== currentChunk.originalText,
   );
   const hasPatches = session.patches.length > 0 || isCurrentChunkDirty;
-  const progressPercent = metadata.size > 0 ? Math.min(100, (session.currentOffset / metadata.size) * 100) : 0;
+  const progressPercent = fileSize > 0 ? Math.min(100, (session.currentOffset / fileSize) * 100) : 0;
 
   const emitState = React.useCallback((next: LargeFileSessionState, dirty = next.patches.length > 0) => {
     onStateChange?.(next, dirty);
@@ -123,16 +171,72 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     return { ...base, patches };
   }, []);
 
-  const loadChunk = React.useCallback(async (offset: number, baseState = session) => {
+  const getStateWithEditorDraft = React.useCallback((baseState = sessionRef.current): LargeFileSessionState => {
+    const chunk = baseState.chunk;
+    if (!chunk) return baseState;
+    const draftText = draftTextRef.current;
+    if (draftText === chunk.text) return withPreservedCurrentPatch(baseState);
+    return withPreservedCurrentPatch({
+      ...baseState,
+      chunk: {
+        ...chunk,
+        text: draftText,
+      },
+    });
+  }, [withPreservedCurrentPatch]);
+
+  const flushEditorDraft = React.useCallback((status = 'Unsaved changes.') => {
+    const nextState = getStateWithEditorDraft();
+    const dirty = nextState.patches.length > 0 || Boolean(nextState.chunk && nextState.chunk.text !== nextState.chunk.originalText);
+    emitState({ ...nextState, status }, dirty);
+    return nextState;
+  }, [emitState, getStateWithEditorDraft]);
+
+  const flushPendingEditorDraft = React.useCallback((status = 'Unsaved changes.') => {
+    const currentState = sessionRef.current;
+    const chunk = currentState.chunk;
+    if (!chunk) return currentState;
+    if (draftTextRef.current === chunk.text && chunk.text === chunk.originalText) return currentState;
+    return flushEditorDraft(status);
+  }, [flushEditorDraft]);
+
+  const scheduleEditorDraftSync = React.useCallback(() => {
+    if (editSyncTimerRef.current != null) {
+      window.clearTimeout(editSyncTimerRef.current);
+    }
+    editSyncTimerRef.current = window.setTimeout(() => {
+      editSyncTimerRef.current = null;
+      flushEditorDraft();
+    }, EDIT_SYNC_DEBOUNCE_MS);
+  }, [flushEditorDraft]);
+
+  const loadChunk = React.useCallback(async (offset: number, baseState = sessionRef.current) => {
     if (!workspacePath || !relativePath) return;
 
     const requestId = ++loadingRef.current;
-    const safeOffset = Math.max(0, Math.min(offset, Math.max(0, metadata.size - 1)));
+    const activeFileSize = baseState.fileSize ?? sessionRef.current.fileSize ?? metadata.size;
+    const safeOffset = normalizeChunkOffset(offset, activeFileSize);
     const startedAt = performance.now();
     setIsLoadingChunk(true);
 
     try {
-      const preserved = withPreservedCurrentPatch(baseState);
+      const preserved = getStateWithEditorDraft(baseState);
+      const cachedChunk = preserved.chunkCache?.find((cached) => cached.offset === safeOffset);
+      if (cachedChunk) {
+        const patchedChunk = applyPatchToChunk(cachedChunk, preserved.patches);
+        lastRenderMarkRef.current = performance.now();
+        emitState({
+          ...preserved,
+          currentOffset: patchedChunk.offset,
+          chunk: patchedChunk,
+          status: 'Ready.',
+        }, preserved.patches.length > 0);
+        console.log(
+          `[LargeFile] chunk cache hit tab=${tabId} offset=${patchedChunk.offset} cache=${preserved.chunkCache?.length ?? 0}`,
+        );
+        return;
+      }
+
       const chunk = await invoke<FileChunkResponse>('read_file_chunk', {
         workspacePath,
         relativePath,
@@ -157,14 +261,16 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
       };
 
       console.log(
-        `[LargeFile] chunk read tab=${tabId} offset=${chunk.offset} bytes=${chunk.bytesRead} elapsed_ms=${(performance.now() - startedAt).toFixed(1)}`,
+        `[LargeFile] chunk read tab=${tabId} offset=${chunk.offset} bytes=${chunk.bytesRead} elapsed_ms=${(performance.now() - startedAt).toFixed(1)} cache=${preserved.chunkCache?.length ?? 0}`,
       );
 
+      lastRenderMarkRef.current = performance.now();
       emitState({
         ...preserved,
         currentOffset: chunk.offset,
         chunk: chunkState,
-        status: `Loaded ${formatBytes(chunk.bytesRead)} at ${formatBytes(chunk.offset)}.`,
+        chunkCache: updateChunkCache(preserved.chunkCache, { ...chunkState, text: chunk.text, originalText: chunk.text }),
+        status: 'Ready.',
       }, preserved.patches.length > 0);
     } catch (err) {
       console.error('[LargeFile] chunk load failed:', err);
@@ -172,7 +278,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     } finally {
       if (requestId === loadingRef.current) setIsLoadingChunk(false);
     }
-  }, [emitState, metadata.size, relativePath, session, tabId, withPreservedCurrentPatch, workspacePath]);
+  }, [emitState, getStateWithEditorDraft, metadata.size, relativePath, tabId, workspacePath]);
 
   React.useEffect(() => {
     if (!session.chunk && !isLoadingChunk) {
@@ -180,8 +286,40 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     }
   }, [isLoadingChunk, loadChunk, session]);
 
+  React.useLayoutEffect(() => {
+    if (!currentChunk) return;
+    const isNewWindow = !isSameChunk(renderedChunkRef.current, currentChunk);
+    draftTextRef.current = currentChunk.text;
+    if (isNewWindow && editorRef.current && editorRef.current.value !== currentChunk.text) {
+      editorRef.current.value = currentChunk.text;
+    }
+    renderedChunkRef.current = currentChunk;
+    if (lastRenderMarkRef.current != null) {
+      const renderStartedAt = lastRenderMarkRef.current;
+      window.requestAnimationFrame(() => {
+        console.log(
+          `[LargeFile] window paint tab=${tabId} offset=${currentChunk.offset} bytes=${currentChunk.bytesRead} render_ms=${(performance.now() - renderStartedAt).toFixed(1)} cache=${session.chunkCache?.length ?? 0} patches=${session.patches.length}`,
+        );
+      });
+      lastRenderMarkRef.current = null;
+    }
+  }, [currentChunk, session.chunkCache?.length, session.patches.length, tabId]);
+
   React.useEffect(() => {
+    const unlistenSaveProgress = safeListen<SaveProgressEvent>('large-file-save-progress', (event) => {
+      const payload = event.payload;
+      if (payload.requestId === saveRequestRef.current) {
+        setSaveProgress(payload);
+      }
+    });
+
     return () => {
+      unlistenSaveProgress();
+      if (editSyncTimerRef.current != null) {
+        window.clearTimeout(editSyncTimerRef.current);
+        editSyncTimerRef.current = null;
+      }
+      flushPendingEditorDraft('Chunk edit preserved.');
       cancelSearchRef.current = true;
       cancelIndexRef.current = true;
     };
@@ -214,6 +352,11 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
 
       try {
         while (!cancelIndexRef.current) {
+          if (Date.now() - lastInteractionRef.current < 650) {
+            await new Promise((resolve) => window.setTimeout(resolve, 160));
+            continue;
+          }
+
           const chunkStartedAt = performance.now();
           const chunk = await invoke<FileChunkResponse>('read_file_chunk', {
             workspacePath,
@@ -266,18 +409,30 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     runIndex();
     return () => {
       cancelIndexRef.current = true;
+      const index = sessionRef.current.lineIndex;
+      if (index?.isIndexing) {
+        emitState({
+          ...sessionRef.current,
+          lineIndex: {
+            ...index,
+            isIndexing: false,
+          },
+        }, sessionRef.current.patches.length > 0);
+      }
     };
   }, [relativePath, tabId, workspacePath]); // Keep index task alive across tab-state updates.
 
   const updateCurrentText = (text: string) => {
     if (!currentChunk) return;
-    const nextChunk = { ...currentChunk, text };
-    const nextState = withPreservedCurrentPatch({ ...session, chunk: nextChunk });
-    emitState({ ...nextState, chunk: nextChunk, status: 'Chunk edit pending.' }, true);
+    lastInteractionRef.current = Date.now();
+    draftTextRef.current = text;
+    scheduleEditorDraftSync();
   };
 
   const jumpToOffset = (offset: number) => {
-    loadChunk(offset, session);
+    lastInteractionRef.current = Date.now();
+    const base = flushEditorDraft('Navigating...');
+    loadChunk(offset, base);
   };
 
   const jumpToPercent = () => {
@@ -285,7 +440,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     if (!trimmed) return;
     if (trimmed.endsWith('%')) {
       const percent = Number(trimmed.slice(0, -1));
-      if (Number.isFinite(percent)) jumpToOffset(Math.floor((Math.max(0, Math.min(100, percent)) / 100) * metadata.size));
+      if (Number.isFinite(percent)) jumpToOffset(Math.floor((Math.max(0, Math.min(100, percent)) / 100) * fileSize));
       return;
     }
     const offset = Number(trimmed);
@@ -297,13 +452,16 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
     if (!trimmed || !workspacePath || !relativePath) return;
 
     cancelSearchRef.current = false;
+    lastInteractionRef.current = Date.now();
+    const searchId = ++searchRef.current;
     setIsSearching(true);
     let offset = 0;
     let lineOffset = 0;
     let totalScanned = 0;
     let accumulatedResults: LargeFileSearchResult[] = [];
     const startedAt = performance.now();
-    emitState({ ...session, searchQuery: trimmed, searchResults: [], scannedBytes: 0, status: 'Searching...' }, hasPatches);
+    const baseState = flushEditorDraft('Searching...');
+    emitState({ ...baseState, searchQuery: trimmed, searchResults: [], scannedBytes: 0, status: 'Searching...' }, hasPatches);
 
     try {
       while (!cancelSearchRef.current) {
@@ -317,6 +475,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
           maxBytes: SEARCH_CHUNK_BYTES,
           maxResults: 50,
         });
+        if (searchId !== searchRef.current) return;
 
         totalScanned += chunk.scannedBytes;
         offset = chunk.nextOffset;
@@ -324,7 +483,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
         accumulatedResults = [...accumulatedResults, ...chunk.matches].slice(0, MAX_VISIBLE_RESULTS);
 
         emitState({
-          ...session,
+          ...sessionRef.current,
           searchQuery: trimmed,
           searchResults: accumulatedResults,
           scannedBytes: totalScanned,
@@ -337,7 +496,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
 
         if (chunk.isEof) {
           emitState({
-            ...session,
+            ...sessionRef.current,
             searchQuery: trimmed,
             searchResults: accumulatedResults,
             scannedBytes: totalScanned,
@@ -350,48 +509,69 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
       }
 
       if (cancelSearchRef.current) {
-        emitState({ ...session, status: 'Search cancelled.' }, hasPatches);
+        emitState({ ...sessionRef.current, status: 'Search cancelled.' }, hasPatches);
       }
     } catch (err) {
       console.error('[LargeFile] search failed:', err);
-      emitState({ ...session, status: `Search failed: ${err}` }, hasPatches);
+      emitState({ ...sessionRef.current, status: `Search failed: ${err}` }, hasPatches);
     } finally {
-      setIsSearching(false);
+      if (searchId === searchRef.current) setIsSearching(false);
     }
-  }, [emitState, hasPatches, query, relativePath, session, tabId, workspacePath]);
+  }, [emitState, flushEditorDraft, hasPatches, query, relativePath, tabId, workspacePath]);
 
   const savePatches = React.useCallback(async () => {
     if (!workspacePath || !relativePath) return;
-    const stateToSave = withPreservedCurrentPatch(session);
+    const stateToSave = flushEditorDraft('Saving changes...');
     if (stateToSave.patches.length === 0) return;
 
     const startedAt = performance.now();
+    const requestId = `${tabId}-${Date.now()}`;
+    saveRequestRef.current = requestId;
     setIsSaving(true);
-    emitState({ ...stateToSave, status: `Saving ${stateToSave.patches.length} patch(es)...` }, true);
+    setSaveProgress({
+      requestId,
+      writtenBytes: 0,
+      totalBytes: fileSize,
+      phase: 'Preparing',
+    });
+    emitState({ ...stateToSave, status: 'Saving changes...' }, true);
 
     try {
       const result = await invoke<SaveResult>('save_large_file_patches', {
         workspacePath,
         relativePath,
         patches: stateToSave.patches.map(({ start, end, text }) => ({ start, end, text })),
+        requestId,
       });
 
       console.log(
         `[LargeFile] save complete tab=${tabId} patches=${result.patchCount} size=${result.size} elapsed_ms=${(performance.now() - startedAt).toFixed(1)}`,
       );
-      emitState({
+      const refreshedState: LargeFileSessionState = {
         ...stateToSave,
+        currentOffset: Math.min(stateToSave.currentOffset, Math.max(0, result.size - 1)),
+        fileSize: result.size,
+        modifiedAt: result.modifiedAt,
         patches: [],
-        chunk: stateToSave.chunk ? { ...stateToSave.chunk, originalText: stateToSave.chunk.text } : undefined,
-        status: `Saved ${result.patchCount} patch(es). Backup: ${result.backupPath ?? 'none'}`,
-      }, false);
+        chunk: undefined,
+        chunkCache: [],
+        searchResults: [],
+        scannedBytes: 0,
+        lineIndex: undefined,
+        status: 'Saved changes.',
+      };
+      draftTextRef.current = '';
+      emitState(refreshedState, false);
+      void loadChunk(refreshedState.currentOffset, refreshedState);
     } catch (err) {
       console.error('[LargeFile] save failed:', err);
       emitState({ ...stateToSave, status: `Save failed: ${err}` }, true);
     } finally {
       setIsSaving(false);
+      saveRequestRef.current = null;
+      window.setTimeout(() => setSaveProgress(null), 700);
     }
-  }, [emitState, relativePath, session, tabId, withPreservedCurrentPatch, workspacePath]);
+  }, [emitState, fileSize, flushEditorDraft, loadChunk, relativePath, tabId, workspacePath]);
 
   React.useEffect(() => {
     const handleSaveRequest = (event: Event) => {
@@ -405,58 +585,35 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
 
   const discardChanges = () => {
     const resetChunk = currentChunk ? { ...currentChunk, text: currentChunk.originalText } : undefined;
-    emitState({ ...session, patches: [], chunk: resetChunk, status: 'Discarded large-file edits.' }, false);
+    draftTextRef.current = resetChunk?.text ?? '';
+    if (editorRef.current) editorRef.current.value = draftTextRef.current;
+    emitState({ ...session, patches: [], chunk: resetChunk, status: 'Discarded edits.' }, false);
   };
 
-  const modifiedLabel = metadata.modifiedAt ? new Date(metadata.modifiedAt).toLocaleString() : 'Unknown';
-  const scannedPercent = metadata.size > 0 ? Math.min(100, ((session.scannedBytes ?? 0) / metadata.size) * 100) : 0;
+  const modifiedLabel = modifiedAt ? new Date(modifiedAt).toLocaleString() : 'Unknown';
+  const scannedPercent = fileSize > 0 ? Math.min(100, ((session.scannedBytes ?? 0) / fileSize) * 100) : 0;
+  const savePercent = saveProgress?.totalBytes
+    ? Math.min(100, (saveProgress.writtenBytes / saveProgress.totalBytes) * 100)
+    : 0;
 
   return (
     <div className="large-file-panel">
       <div className="large-file-header">
         <div>
-          <h2>This file is very large and has been opened in Large File Mode.</h2>
-          <p>The visible content is loaded in chunks. Edits are tracked as patch ranges and saved by streaming the file safely.</p>
+          <h2>{metadata.name}</h2>
+          <p>Editable text view.</p>
         </div>
-        <span className="large-file-badge">Large File Mode</span>
-      </div>
-
-      <div className="large-file-grid">
-        <div className="large-file-field">
-          <span>Name</span>
-          <strong>{metadata.name}</strong>
+        <div className="large-file-badges" aria-label="File status">
+          <span className="large-file-badge muted">{formatBytes(fileSize)}</span>
+          <span className="large-file-badge success">Editable</span>
         </div>
-        <div className="large-file-field">
-          <span>Size</span>
-          <strong>{formatBytes(metadata.size)}</strong>
-        </div>
-        <div className="large-file-field">
-          <span>Extension</span>
-          <strong>{metadata.extension || 'None'}</strong>
-        </div>
-        <div className="large-file-field">
-          <span>Modified</span>
-          <strong>{modifiedLabel}</strong>
-        </div>
-        <div className="large-file-field large-file-path">
-          <span>Path</span>
-          <strong>{metadata.path}</strong>
-        </div>
-      </div>
-
-      <div className="large-file-disabled">
-        <span>Full preview disabled</span>
-        <span>Full outline disabled</span>
-        <span>Full math rendering disabled</span>
-        <span>Full syntax highlighting disabled</span>
-        <span>Chunked editing enabled</span>
       </div>
 
       <div className="large-file-toolbar">
         <button type="button" onClick={() => jumpToOffset(0)} disabled={isLoadingChunk}>Start</button>
         <button type="button" onClick={() => jumpToOffset(Math.max(0, session.currentOffset - CHUNK_BYTES))} disabled={isLoadingChunk}>Previous</button>
         <button type="button" onClick={() => jumpToOffset(currentChunk?.nextOffset ?? session.currentOffset + CHUNK_BYTES)} disabled={isLoadingChunk || currentChunk?.isEof}>Next</button>
-        <button type="button" onClick={() => jumpToOffset(Math.max(0, metadata.size - CHUNK_BYTES))} disabled={isLoadingChunk}>End</button>
+        <button type="button" onClick={() => jumpToOffset(Math.max(0, fileSize - 1))} disabled={isLoadingChunk}>End</button>
         <input
           value={jumpValue}
           onChange={(event) => setJumpValue(event.target.value)}
@@ -473,27 +630,74 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
       <div className="large-file-progress">
         <div style={{ width: `${progressPercent}%` }} />
       </div>
-      <div className="large-file-search-status">
-        Offset {formatBytes(session.currentOffset)} / {formatBytes(metadata.size)} ({progressPercent.toFixed(1)}%). {currentChunk ? `${formatBytes(currentChunk.bytesRead)} loaded. ${currentChunk.newlineStyle ?? 'Unknown'} newlines.` : 'No chunk loaded.'}
-      </div>
-      <div className="large-file-search-status">
-        Sparse line index: {session.lineIndex?.isComplete ? 'complete' : session.lineIndex?.isIndexing ? 'building in background' : 'pending'}
-        {session.lineIndex ? `, ${formatBytes(session.lineIndex.indexedBytes)} indexed, ${session.lineIndex.checkpoints.length} checkpoint(s)` : ''}.
-      </div>
+      {showDetailsPanel && (
+        <div className="large-file-search-status">
+          Offset {formatBytes(session.currentOffset)} / {formatBytes(fileSize)} ({progressPercent.toFixed(1)}%). {currentChunk ? `${formatBytes(currentChunk.bytesRead)} visible. ${currentChunk.newlineStyle ?? 'Unknown'} newlines.` : 'Loading text.'}
+          {' '}
+          Text index: {session.lineIndex?.isComplete ? 'complete' : session.lineIndex?.isIndexing ? 'building in background' : 'pending'}
+          {session.lineIndex ? `, ${formatBytes(session.lineIndex.indexedBytes)} indexed, ${session.lineIndex.checkpoints.length} checkpoint(s)` : ''}.
+        </div>
+      )}
 
       <div className={`large-file-editor ${isCurrentChunkDirty ? 'dirty' : ''}`}>
         <div className="large-file-editor-meta">
-          <span>{isLoadingChunk ? 'Loading chunk...' : session.status}</span>
-          <span>{session.patches.length} saved patch range(s), {byteLength(currentText)} visible bytes</span>
+          <span>{isLoadingChunk ? 'Loading...' : session.status}</span>
+          <span>
+            {hasPatches ? 'Unsaved changes' : 'Saved'}
+            {showDetailsPanel ? ` · ${byteLength(currentText)} visible bytes` : ''}
+          </span>
         </div>
         <textarea
-          value={currentText}
+          ref={editorRef}
+          defaultValue={currentText}
           onChange={(event) => updateCurrentText(event.target.value)}
+          onBlur={() => flushEditorDraft()}
           spellCheck={false}
           wrap="off"
-          aria-label="Large file chunk editor"
+          aria-label="Text editor"
         />
       </div>
+
+      {isSaving && saveProgress && (
+        <div className="large-file-save-progress" role="status" aria-live="polite">
+          <span>{saveProgress.phase} {savePercent.toFixed(0)}%</span>
+          <div className="large-file-progress">
+            <div style={{ width: `${savePercent}%` }} />
+          </div>
+        </div>
+      )}
+
+      {showDetailsPanel && (
+        <details className="large-file-details">
+          <summary>Text engine details</summary>
+          <div className="large-file-grid">
+            <div className="large-file-field">
+              <span>Size</span>
+              <strong>{formatBytes(fileSize)}</strong>
+            </div>
+            <div className="large-file-field">
+              <span>Extension</span>
+              <strong>{metadata.extension || 'None'}</strong>
+            </div>
+            <div className="large-file-field">
+              <span>Modified</span>
+              <strong>{modifiedLabel}</strong>
+            </div>
+            <div className="large-file-field large-file-path">
+              <span>Path</span>
+              <strong>{metadata.path}</strong>
+            </div>
+          </div>
+
+          <div className="large-file-disabled">
+            <span>Full preview disabled</span>
+            <span>Full outline disabled</span>
+            <span>Full math rendering disabled</span>
+            <span>Full syntax highlighting disabled</span>
+            <span>Patch-based saves enabled</span>
+          </div>
+        </details>
+      )}
 
       <div className="large-file-search">
         <div className="large-file-search-row">
@@ -503,7 +707,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
             onKeyDown={(event) => {
               if (event.key === 'Enter') runSearch();
             }}
-            placeholder="Streaming search in this large file"
+            placeholder="Search in file"
           />
           <button type="button" onClick={runSearch} disabled={isSearching || !query.trim()}>
             Search

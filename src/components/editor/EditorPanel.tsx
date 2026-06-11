@@ -60,6 +60,7 @@ interface EditorPanelProps {
   onNewFile: () => void;
   onOpenSettings: () => void;
   previewKey?: number;
+  showLargeFileDetails?: boolean;
 }
 
 // ── Tab Icon Helper ─────────────────────────────────
@@ -118,7 +119,6 @@ const SortableTab: React.FC<SortableTabProps> = ({ tab, isActive, onSelect, onCl
           <UnsavedDot size={7} />
         </span>
       )}
-      {tab.isLargeFile && <span className="editor-tab-large">Large</span>}
       <button
         className="editor-tab-close"
         onPointerDown={(e) => e.stopPropagation()} // Prevent drag start on close button
@@ -149,8 +149,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onNewFile,
   onOpenSettings,
   previewKey,
+  showLargeFileDetails = true,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
+  const isStreamingTextTab = Boolean(activeTab?.isLargeFile);
   const [hotEditorTabIds, setHotEditorTabIds] = React.useState<string[]>(() => activeTabId ? [activeTabId] : []);
   const [showLineEndingMenu, setShowLineEndingMenu] = React.useState(false);
 
@@ -377,22 +379,26 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <div className="editor-tab-bar-right">
           <div className="editor-view-switcher">
             <button
-              className={`editor-view-btn ${viewMode === 'editor' ? 'active' : ''}`}
+              className={`editor-view-btn ${isStreamingTextTab || viewMode === 'editor' ? 'active' : ''}`}
               onClick={() => onViewModeChange('editor')}
             >
               <EditorIcon size={13} />
               Editor
             </button>
             <button
-              className={`editor-view-btn ${viewMode === 'split' ? 'active' : ''}`}
+              className={`editor-view-btn ${!isStreamingTextTab && viewMode === 'split' ? 'active' : ''}`}
               onClick={() => onViewModeChange('split')}
+              disabled={isStreamingTextTab}
+              title={isStreamingTextTab ? 'Preview is unavailable for this file size' : 'Split'}
             >
               <SplitIcon size={13} />
               Split
             </button>
             <button
-              className={`editor-view-btn ${viewMode === 'preview' ? 'active' : ''}`}
+              className={`editor-view-btn ${!isStreamingTextTab && viewMode === 'preview' ? 'active' : ''}`}
               onClick={() => onViewModeChange('preview')}
+              disabled={isStreamingTextTab}
+              title={isStreamingTextTab ? 'Preview is unavailable for this file size' : 'Preview'}
             >
               <PreviewIcon size={13} />
               Preview
@@ -431,6 +437,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
             relativePath={activeTab.relativePath}
             metadata={activeTab.largeFileMetadata}
             state={activeTab.largeFileState}
+            showDetailsPanel={showLargeFileDetails}
             onStateChange={(state, isDirty) => onLargeFileStateChange?.(activeTab.id, state, isDirty)}
           />
         </div>
@@ -489,10 +496,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <span className="editor-statusbar-item">
           <span className="editor-statusbar-accent">{activeTab.name}</span>
         </span>
-        <span className="editor-statusbar-item">{activeTab.isLargeFile ? 'Outline deferred' : `${lineCount == null ? '...' : lineCount} lines`}</span>
+        <span className="editor-statusbar-item">{activeTab.isLargeFile ? 'Text' : `${lineCount == null ? '...' : lineCount} lines`}</span>
         <span className="editor-statusbar-item">{activeTab.isLargeFile ? formatBytes(charCount) : `${charCount} chars`}</span>
         <span className="editor-statusbar-item" style={{ color: activeTab.saveStatus === 'error' ? 'var(--color-error)' : activeTab.saveStatus === 'saving' ? 'var(--color-accent)' : activeTab.isDirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
-          {activeTab.isLargeFile ? activeTab.isDirty ? 'Large file edits pending' : 'Chunked large file' : activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
+          {activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
         </span>
         <div className="editor-statusbar-spacer" />
         <span className="editor-statusbar-item">
