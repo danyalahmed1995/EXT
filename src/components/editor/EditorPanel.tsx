@@ -17,6 +17,7 @@ import {
 import { MarkdownPreview } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
 import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
+import { getEditorLanguage, getFileTypeLabel, isMarkdownFile, isPreviewableMarkdownFile } from '../../utils/fileTypes';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
@@ -55,7 +56,7 @@ interface EditorPanelProps {
 // ── Tab Icon Helper ─────────────────────────────────
 
 function getTabIcon(extension: string): React.ReactNode {
-  if (extension === '.md' || extension === '.markdown') {
+  if (isMarkdownFile(extension)) {
     return <FileMarkdownIcon size={14} />;
   }
   return <FileTextIcon size={14} />;
@@ -269,6 +270,8 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   }, [activeTab?.id, activeTab?.content]);
   const charCount = activeTab?.content ? activeTab.content.length : 0;
   const lineEndingLabel = activeTab?.lineEnding ?? 'LF';
+  const activeTabLanguage = activeTab ? getEditorLanguage(activeTab.extension) : 'text';
+  const activeTabPreviewable = activeTab ? isPreviewableMarkdownFile(activeTab.extension) : false;
 
   if (!activeTab) {
     return (
@@ -429,19 +432,20 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                     onChange={onContentChange}
                     onSave={onSaveFile}
                     isActive={tab.id === activeTab.id}
+                    language={getEditorLanguage(tab.extension)}
                   />
                 </div>
               ))}
             </div>
           )}
 
-          {(viewMode === 'preview' || viewMode === 'split') && (activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+          {(viewMode === 'preview' || viewMode === 'split') && activeTabPreviewable && (
             <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
               <MarkdownPreview key={`${activeTab.id}-${previewKey}`} content={activeTab.content} absolutePath={activeTab.absolutePath} isActive={true} />
             </div>
           )}
 
-          {viewMode === 'preview' && !(activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+          {viewMode === 'preview' && !activeTabPreviewable && (
             <div className="editor-content-editor full">
               <CodeMirrorEditor
                 activeTabId={activeTab.id}
@@ -449,6 +453,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                 onChange={onContentChange}
                 onSave={onSaveFile}
                 isActive={true}
+                language={activeTabLanguage}
               />
             </div>
           )}
@@ -468,7 +473,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         </span>
         <div className="editor-statusbar-spacer" />
         <span className="editor-statusbar-item">
-          {activeTab.extension.replace('.', '').toUpperCase()}
+          {getFileTypeLabel(activeTab.extension)}
         </span>
         <span className="editor-statusbar-item">UTF-8</span>
         <div className="editor-statusbar-line-ending">

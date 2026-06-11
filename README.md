@@ -5,7 +5,7 @@
 <h1 align="center">EXT</h1>
 
 <p align="center">
-  <strong>A local-first workspace for Markdown and plain text files.</strong>
+  <strong>A local-first workspace for Markdown, JSON, YAML, and plain text files.</strong>
 </p>
 
 <p align="center">
@@ -39,9 +39,9 @@
 
 ---
 
-EXT is for people with Markdown and text files scattered across projects, notes, docs, repos, and half-finished idea caves.
+EXT is for people with Markdown, JSON, YAML, and text files scattered across projects, notes, docs, repos, and half-finished idea caves.
 
-It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md` and `.txt` files, and gives you one place to read, search, edit, preview, and organize them.
+It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md`, `.markdown`, `.json`, `.yml`, `.yaml`, and `.txt` files, and gives you one place to read, search, edit, preview, and organize them.
 
 You can keep using Git, OneDrive, Dropbox, Syncthing, Obsidian, VS Code, Notepad, Sublime Text, or any other tool alongside EXT. The files remain normal files on disk.
 
@@ -51,7 +51,7 @@ Most Markdown tools either want to become your whole world or stay too tiny to m
 
 | You want | EXT gives you |
 | --- | --- |
-| Local folders, not a hosted vault | Workspace scanning over real `.md` and `.txt` files |
+| Local folders, not a hosted vault | Workspace scanning over real Markdown, JSON, YAML, and text files |
 | Fast access across many folders | Smart views, filename search, tabs, and recent files |
 | A proper editor without ceremony | CodeMirror 6, autosave, status bar, find/replace, line ending controls |
 | Markdown preview that can survive large files | Demand-driven rendering, chunked preview work, large-doc protection |
@@ -71,11 +71,11 @@ Demo media lives in the repository for README and development use. Production bu
 
 ## What EXT is
 
-EXT is a local-first desktop workspace for Markdown and plain text files.
+EXT is a local-first desktop workspace for Markdown, JSON, YAML, and plain text files.
 
 It gives you:
 
-- one place to browse local Markdown and text files
+- one place to browse local Markdown, JSON, YAML, and text files
 - fast filename search across connected workspaces
 - smart views for common file groups
 - a clean editor with live Markdown preview
@@ -99,14 +99,14 @@ There are no accounts, hosted documents, proprietary sync layers, or hidden note
 
 - Add existing folders as workspaces.
 - EXT scans local folders directly.
-- Only `.md` and `.txt` files are shown in the workspace file list.
+- Supported editable files are shown in the workspace file list: `.md`, `.markdown`, `.json`, `.yml`, `.yaml`, and `.txt`.
 - Common noisy directories such as `.git`, `node_modules`, build output, benchmark output, and cache folders are ignored.
 - Files can still be opened and edited by other applications.
 - Removing a workspace from EXT does not delete the folder from disk.
 
 ### File management
 
-- Create Markdown and text files.
+- Create Markdown, JSON, YAML, and text files.
 - Create folders.
 - Rename files.
 - Delete files with confirmation.
@@ -141,15 +141,18 @@ The sidebar includes quick views for common workflows:
 ### Editor and preview
 
 - CodeMirror 6 editor.
+- Syntax highlighting for Markdown, JSON, YAML, and plain text.
 - Autosave to local disk.
 - Saved/unsaved state indicator.
 - Editor Only, Split View, and Preview Only modes.
 - GitHub-Flavored Markdown preview.
 - LaTeX and math-heavy Markdown preview support.
 - Markdown outline for heading navigation.
+- JSON and YAML edit as source files without preview, outline, schema validation, linting, or formatting.
 - Local image rendering in preview for valid Markdown image paths.
 - Status bar metadata for file type, encoding, line endings, size, and save state.
 - Demand-driven preview rendering for large Markdown files.
+- Viewport-bounded syntax highlighting for large JSON and YAML files.
 
 Image files are rendered when referenced from Markdown, but they are not added to the workspace file list and EXT does not manage image assets.
 
@@ -299,6 +302,22 @@ Platform-specific packages are best built on their native OS:
 - macOS DMG on macOS
 - Linux packages on Linux
 
+### Reset local app state
+
+To clear EXT's saved browser/development state and start with a fresh workspace list:
+
+```bash
+npm run reset:state
+```
+
+To also clear the desktop app state used by the Tauri build:
+
+```bash
+npm run reset:state:desktop
+```
+
+These commands remove saved EXT settings/workspaces from local development storage. They do not delete your actual workspace folders or files.
+
 ## Quality checks
 
 Frontend:
@@ -321,19 +340,20 @@ The repository includes GitHub Actions workflows for frontend and Rust/Tauri che
 
 ## Benchmarking performance
 
-To run the large Markdown preview responsiveness benchmark:
+To run the large-file responsiveness benchmark:
 
 ```bash
 npm run benchmark:large-md
 ```
 
-This benchmark tests the demand-driven rendering architecture against massive Markdown and LaTeX files, including stress files up to 130,000 lines.
+This benchmark tests the demand-driven rendering architecture against massive Markdown and LaTeX files, plus viewport-bounded JSON/YAML highlighting on large valid and broken structured files.
 
 It verifies:
 
 - background Web Worker processing and HTML chunk generation speed
 - main-thread DOM injection and DOMPurify sanitization latency
 - editor responsiveness while preview work is happening
+- JSON/YAML viewport syntax highlighting without full-document parsing
 - stable memory behavior without OOM crashes
 
 Benchmark files are development assets and are not shipped in production installers.

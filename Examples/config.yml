@@ -1,0 +1,22 @@
+# EXT YAML config example
+app:
+  name: EXT
+  mode: desktop
+  features:
+    - markdown-preview
+    - json-editing
+    - yaml-editing
+  preview:
+    markdown: true
+    json: false
+    yaml: false
+
+editor:
+  languageModes:
+    ".json": json
+    ".yml": yaml
+    ".yaml": yaml
+  largeFileMode:
+    enabled: true
+    validation: false
+    formatting: false
