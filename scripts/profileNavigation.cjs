@@ -22,12 +22,21 @@ function logProgress(message) {
   fs.appendFileSync(PROGRESS_LOG, `${message}\n`);
 }
 
+const SUPPORTED_BENCHMARK_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.json', '.yml', '.yaml']);
 const TARGET_RELATIVE_PATHS = [
   'ext-large-md-with-latex/example_matrices_align.md',
   'ext-large-md-with-latex/example_tables_with_math.md',
   'ext-large-md-with-latex/example_long_lines_with_math.md',
   'ext-large-md-with-latex/example_block_math.md',
   'ext-large-md-no-latex/example.md',
+  'ext_valid_5mb_json_yaml_examples/package-lock-style-large.json',
+  'ext_valid_5mb_json_yaml_examples/workspace-index-large.json',
+  'ext_valid_5mb_json_yaml_examples/kubernetes-configmaps-large.yaml',
+  'ext_valid_5mb_json_yaml_examples/.github/workflows/large-matrix.yml',
+  'ext_broken_5mb_json_yaml_examples/broken-large-missing-end.json',
+  'ext_broken_5mb_json_yaml_examples/broken-one-line-ish.json',
+  'ext_broken_5mb_json_yaml_examples/broken-large-indent.yml',
+  'ext_broken_5mb_json_yaml_examples/broken-anchors.yaml',
 ];
 const SEED_RELATIVE_PATH = '_profile_seed.md';
 
@@ -45,6 +54,15 @@ function toFileId(relativePath) {
 function getExtension(relativePath) {
   const ext = path.extname(relativePath).toLowerCase();
   return ext || '.txt';
+}
+
+function getFileType(relativePath) {
+  const ext = getExtension(relativePath);
+  if (ext === '.md' || ext === '.markdown') return 'Markdown';
+  if (ext === '.json') return 'JSON';
+  if (ext === '.yml' || ext === '.yaml') return 'YAML';
+  if (ext === '.txt') return 'Text';
+  return 'Other';
 }
 
 function getFile(relativePath) {
@@ -80,8 +98,20 @@ const seedFile = {
   isPinned: false,
   hasTodos: false,
 };
-const files = [seedFile, ...TARGET_RELATIVE_PATHS.map(getFile)];
-const targetIds = TARGET_RELATIVE_PATHS.map(toFileId);
+const existingTargetRelativePaths = TARGET_RELATIVE_PATHS.filter((relativePath) => {
+  const absolutePath = path.join(WORKSPACE_PATH, relativePath);
+  return fs.existsSync(absolutePath) && SUPPORTED_BENCHMARK_EXTENSIONS.has(getExtension(relativePath));
+});
+const files = [seedFile, ...existingTargetRelativePaths.map(getFile)];
+const targetIds = existingTargetRelativePaths.map(toFileId);
+const targetMetaById = new Map(existingTargetRelativePaths.map((relativePath) => [
+  toFileId(relativePath),
+  {
+    relativePath,
+    type: getFileType(relativePath),
+    size: fs.statSync(path.join(WORKSPACE_PATH, relativePath)).size,
+  },
+]));
 
 function isPortOpen(url) {
   return new Promise((resolve) => {
@@ -183,6 +213,9 @@ async function main() {
       if (args.relativePath === SEED_RELATIVE_PATH) return seedFile.modifiedAt;
       return fs.statSync(path.join(WORKSPACE_PATH, args.relativePath)).mtime.toISOString();
     }
+    if (cmd === 'save_file') {
+      return new Date().toISOString();
+    }
     if (cmd === 'plugin:event|listen') return Math.floor(Math.random() * 1000000);
     if (cmd === 'plugin:event|unlisten') return null;
     if (cmd === 'plugin:dialog|ask') return true;
@@ -243,6 +276,8 @@ async function main() {
 
   await page.goto(APP_URL, { waitUntil: 'domcontentloaded' });
   await page.waitForSelector('.file-list-item', { timeout: 30000 });
+  await page.getByText(workspace.name, { exact: true }).first().click();
+  await page.waitForTimeout(100);
 
   if (VIEW_MODE === 'editor') {
     await page.getByRole('button', { name: /^Editor$/ }).first().click();
@@ -251,8 +286,11 @@ async function main() {
   }
 
   logProgress(`Opening ${targetIds.length} benchmark files in ${VIEW_MODE} mode...`);
+  const openTimings = [];
   for (const [index, fileId] of targetIds.entries()) {
-    logProgress(`Opening ${index + 1}/${targetIds.length}: ${fileId}`);
+    const meta = targetMetaById.get(fileId);
+    const openStart = performance.now();
+    logProgress(`Opening ${index + 1}/${targetIds.length}: ${meta?.type || 'Unknown'} ${meta?.relativePath || fileId}`);
     const opened = await page.evaluate((id) => {
       const item = document.getElementById(`file-item-${id}`);
       item?.scrollIntoView({ block: 'center' });
@@ -269,7 +307,9 @@ async function main() {
       const editorReady = document.querySelector('.cm-content') || document.querySelector('.markdown-preview');
       return Boolean(tab && active && !loading && editorReady);
     }, fileId, { timeout: 12000 });
-    logProgress(`Opened ${index + 1}/${targetIds.length}: ${fileId}`);
+    const openMs = performance.now() - openStart;
+    openTimings.push(openMs);
+    logProgress(`Opened ${index + 1}/${targetIds.length}: ${meta?.type || 'Unknown'} ${meta?.relativePath || fileId} (${openMs.toFixed(2)}ms)`);
     await page.waitForTimeout(350);
   }
 
@@ -373,6 +413,7 @@ async function main() {
   });
 
   logProgress(`\n--- Summary (${switches.length} switches, ${VIEW_MODE} mode) ---`);
+  printSummary('Open/load time', summarize(openTimings));
   printSummary('Switch delay', summarize(delays));
   printSummary('Active paint', summarize(activePaint));
   printSummary('Editor usable', summarize(editorUsable));
@@ -383,6 +424,10 @@ async function main() {
   logProgress(`Long tasks (>50ms): ${profileData.longTasks.length}`);
   logProgress(`Worst long task: ${worstLongTask.toFixed(2)}ms`);
   logProgress(`Frame gaps >20ms: ${profileData.frameDelays.length}`);
+  logProgress('\n--- Benchmark file types ---');
+  for (const [fileId, meta] of targetMetaById.entries()) {
+    logProgress(`${meta.type}: ${meta.relativePath} (${formatMb(meta.size)}) id=${fileId.slice(0, 24)}`);
+  }
   if (heapUsage) {
     logProgress(
       `JS heap: used=${formatMb(heapUsage.usedJSHeapSize)} total=${formatMb(heapUsage.totalJSHeapSize)} limit=${formatMb(heapUsage.jsHeapSizeLimit)}`,

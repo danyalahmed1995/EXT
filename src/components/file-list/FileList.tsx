@@ -10,6 +10,7 @@ import {
   ChevronDownIcon,
   TrashIcon,
 } from '../../icons/icons';
+import { isMarkdownFile } from '../../utils/fileTypes';
 import './FileList.css';
 
 // ── Types ────────────────────────────────────────────
@@ -64,7 +65,7 @@ function formatDate(isoDate: string): string {
 // ── File Icon Helper ────────────────────────────────
 
 function getFileIcon(extension: string): React.ReactNode {
-  if (extension === '.md' || extension === '.markdown') {
+  if (isMarkdownFile(extension)) {
     return <FileMarkdownIcon size={18} />;
   }
   return <FileTextIcon size={18} />;
@@ -344,7 +345,7 @@ export const FileList: React.FC<FileListProps> = React.memo(({
       ) : (
         <div className="file-list-empty">
           <FolderIcon size={32} className="file-list-empty-icon" />
-          <span>No Markdown or text files found in this view.</span>
+          <span>No supported files found in this view.</span>
         </div>
       )}
     </div>

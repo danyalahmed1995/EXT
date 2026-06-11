@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  ext-docs:
+    image: node:22-alpine
+    working_dir: /workspace
+    command: ["npm", "run", "dev"]
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./:/workspace
+    environment:
+      EXT_PREVIEW_MARKDOWN: "true"
+      EXT_PREVIEW_JSON: "false"
+      EXT_PREVIEW_YAML: "false"

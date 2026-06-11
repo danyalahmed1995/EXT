@@ -20,6 +20,7 @@ import {
   FolderIcon,
 } from '../../icons/icons';
 import { MarkdownOutline } from './MarkdownOutline';
+import { supportsOutline } from '../../utils/fileTypes';
 import './Sidebar.css';
 
 // ── Types ────────────────────────────────────────────
@@ -319,7 +320,7 @@ export const Sidebar: React.FC<SidebarProps> = React.memo(({
         </SidebarSection>
 
         {/* Outline */}
-        {(activeFileExtension === '.md' || activeFileExtension === '.markdown') && activeFileContent && activeFileId && (
+        {activeFileExtension && supportsOutline(activeFileExtension) && activeFileContent && activeFileId && (
           <SidebarSection title="Outline" defaultExpanded={true}>
             <MarkdownOutline content={activeFileContent} fileId={activeFileId} isMarkdown={true} />
           </SidebarSection>

@@ -8,6 +8,7 @@ import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/cor
 import { openPath } from '@tauri-apps/plugin-opener';
 import { convertLineEndings, detectLineEnding, prepareContentForSave, type ConvertibleLineEnding } from '../utils/lineEndings';
 import { safeListen } from '../utils/tauriEvents';
+import { isEditableTextFile, isMarkdownFile } from '../utils/fileTypes';
 
 export function useAppLogic() {
 
@@ -250,8 +251,8 @@ export function useAppLogic() {
 
       recent: Math.min(files.length, 5),
       favorites: files.filter((f) => f.isFavorite).length,
-      allMarkdown: files.filter((f) => f.extension === '.md' || f.extension === '.markdown').length,
-      allText: files.filter((f) => f.extension === '.txt').length,
+      allMarkdown: files.filter((f) => isMarkdownFile(f.extension)).length,
+      allText: files.filter((f) => isEditableTextFile(f.extension) && !isMarkdownFile(f.extension)).length,
       modifiedToday: files.filter((f) => new Date(f.modifiedAt) >= today).length,
       todos: files.filter(
         (f) =>
@@ -284,10 +285,10 @@ export function useAppLogic() {
         result = result.filter((f) => f.isFavorite);
         break;
       case 'allMarkdown':
-        result = result.filter((f) => f.extension === '.md' || f.extension === '.markdown');
+        result = result.filter((f) => isMarkdownFile(f.extension));
         break;
       case 'allText':
-        result = result.filter((f) => f.extension === '.txt');
+        result = result.filter((f) => isEditableTextFile(f.extension) && !isMarkdownFile(f.extension));
         break;
       case 'modifiedToday': {
         const today = new Date();
@@ -1035,6 +1036,8 @@ export function useAppLogic() {
       const customEvent = e as CustomEvent;
       const { x, y, tabId } = customEvent.detail;
       if (!tabId) return;
+      const tab = openTabs.find((t) => t.id === tabId);
+      const isMarkdownTab = tab ? isMarkdownFile(tab.extension) : false;
 
       setContextMenu({
         x,
@@ -1059,11 +1062,11 @@ export function useAppLogic() {
             shortcut: '',
             onClick: () => handleReloadTab(tabId),
           },
-          {
+          ...(isMarkdownTab ? [{
             label: 'Refresh',
             shortcut: '',
             onClick: () => setPreviewKey(k => k + 1),
-          },
+          }] : []),
           {
             label: 'Clear tabs',
             shortcut: '',
@@ -1088,6 +1091,8 @@ export function useAppLogic() {
       const { x, y, clickedTabId, activeTabId } = customEvent.detail;
       const targetTabId = clickedTabId || activeTabId;
       if (!targetTabId) return;
+      const tab = openTabs.find((t) => t.id === targetTabId);
+      const isMarkdownTab = tab ? isMarkdownFile(tab.extension) : false;
 
       setContextMenu({
         x,
@@ -1102,11 +1107,11 @@ export function useAppLogic() {
             shortcut: '',
             onClick: () => handleReloadTab(targetTabId),
           },
-          {
+          ...(isMarkdownTab ? [{
             label: 'Refresh',
             shortcut: '',
             onClick: () => setPreviewKey(k => k + 1),
-          },
+          }] : []),
           {
             label: 'Clear tabs',
             shortcut: '',

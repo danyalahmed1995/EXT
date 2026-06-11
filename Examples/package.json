@@ -1,0 +1,28 @@
+{
+  "name": "ext-json-yaml-standard-examples",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Small JSON/YAML files for EXT syntax and save testing.",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "test": "echo \"No tests yet\""
+  },
+  "dependencies": {
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/language-data": "^6.5.1",
+    "react": "^19.0.0"
+  },
+  "extTest": {
+    "supports": [
+      "markdown",
+      "json",
+      "yaml"
+    ],
+    "preview": {
+      "markdown": true,
+      "json": false,
+      "yaml": false
+    }
+  }
+}
