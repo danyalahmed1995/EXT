@@ -266,7 +266,9 @@ fn scan_directory(
             let mut is_supported = false;
             let mut detected_ext = String::new();
 
-            if !ext_lower.is_empty() && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower)) {
+            if !ext_lower.is_empty()
+                && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower))
+            {
                 is_supported = true;
                 detected_ext = format!(".{}", ext_lower);
             } else if is_shell_config_file(&file_name_str) {
@@ -356,7 +358,9 @@ fn create_file(
     let mut is_supported = false;
     let mut detected_ext = String::new();
 
-    if !ext_lower.is_empty() && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower)) {
+    if !ext_lower.is_empty()
+        && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower))
+    {
         is_supported = true;
         detected_ext = format!(".{}", ext_lower);
     } else if is_shell_config_file(&file_name_str) {
