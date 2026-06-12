@@ -166,5 +166,17 @@ self.onmessage = (e: MessageEvent) => {
     } catch (err: any) {
       self.postMessage({ type: 'block-error', renderId, blockId, error: err.message });
     }
+    return;
+  }
+
+  if (data.type === 'render-full') {
+    const { renderId, content } = data;
+    try {
+      const html = md.render(content);
+      self.postMessage({ type: 'full-result', renderId, html });
+    } catch (err: any) {
+      self.postMessage({ type: 'full-error', renderId, error: err.message });
+    }
+    return;
   }
 };

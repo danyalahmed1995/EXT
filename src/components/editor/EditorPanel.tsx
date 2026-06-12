@@ -13,8 +13,9 @@ import {
   PreviewIcon,
   NewFileIcon,
   SettingsIcon,
+  PrintIcon,
 } from '../../icons/icons';
-import { MarkdownPreview } from '../preview/MarkdownPreview';
+import { MarkdownPreview, printMarkdownDocument } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
 import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
 import { getEditorLanguage, getFileTypeLabel, isMarkdownFile, isPreviewableMarkdownFile } from '../../utils/fileTypes';
@@ -24,6 +25,8 @@ import { LargeFileModePanel } from './LargeFileModePanel';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
+
+export const PRINT_MAX_SIZE_BYTES = 1.5 * 1024 * 1024; // 1.5 MB limit for printing
 
 export type ViewMode = 'editor' | 'split' | 'preview';
 export type SaveStatus = 'saved' | 'unsaved' | 'saving' | 'error';
@@ -155,6 +158,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   const isLargeFileTab = Boolean(activeTab?.isLargeFile);
   const [hotEditorTabIds, setHotEditorTabIds] = React.useState<string[]>(() => activeTabId ? [activeTabId] : []);
   const [showLineEndingMenu, setShowLineEndingMenu] = React.useState(false);
+  const [isPrinting, setIsPrinting] = React.useState(false);
 
   React.useEffect(() => {
     if (!activeTabId) return;
@@ -350,6 +354,20 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
     (window as any).__lastRenderTime = actualDuration;
   };
 
+
+  const handlePrintPreview = async () => {
+    if (!activeTab || isPrinting) return;
+    try {
+      setIsPrinting(true);
+      await printMarkdownDocument(activeTab.content, activeTab.absolutePath);
+    } catch (err) {
+      console.error('Failed to print markdown preview:', err);
+      alert('Failed to generate print preview. Document might be too complex.');
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   return (
     <React.Profiler id="EditorPanel" onRender={onRender}>
       <div className="editor-panel" onKeyDown={handleKeyDown} tabIndex={-1}>
@@ -405,6 +423,21 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               Preview
             </button>
           </div>
+          {activeTabPreviewable && (viewMode === 'preview' || viewMode === 'split') && (() => {
+            const isTooLargeToPrint = charCount > PRINT_MAX_SIZE_BYTES;
+            return (
+              <button
+                className="editor-action-btn"
+                onClick={isTooLargeToPrint ? undefined : handlePrintPreview}
+                title={isTooLargeToPrint ? "Printing is disabled for very large files. Open in an external editor/browser to print." : isPrinting ? "Preparing Print..." : "Print Preview"}
+                disabled={isPrinting || isTooLargeToPrint}
+                style={{ opacity: isPrinting || isTooLargeToPrint ? 0.5 : 1, cursor: isTooLargeToPrint ? 'not-allowed' : isPrinting ? 'wait' : 'pointer' }}
+                data-testid="print-button"
+              >
+                <PrintIcon size={16} />
+              </button>
+            );
+          })()}
           <ThemeDropdown />
           <button
             className="editor-action-btn"
