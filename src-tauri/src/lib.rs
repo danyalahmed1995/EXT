@@ -144,7 +144,11 @@ pub struct LargeFileSaveProgress {
 
 fn detect_newline_style(text: &str) -> String {
     let crlf = text.matches("\r\n").count();
-    let lf = text.bytes().filter(|b| *b == b'\n').count().saturating_sub(crlf);
+    let lf = text
+        .bytes()
+        .filter(|b| *b == b'\n')
+        .count()
+        .saturating_sub(crlf);
     match (crlf > 0, lf > 0) {
         (true, true) => "Mixed".to_string(),
         (true, false) => "CRLF".to_string(),
@@ -467,14 +471,18 @@ fn delete_file(workspace_path: String, relative_path: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-fn get_file_metadata(workspace_path: String, relative_path: String) -> Result<FileMetadata, String> {
+fn get_file_metadata(
+    workspace_path: String,
+    relative_path: String,
+) -> Result<FileMetadata, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
 
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
 
-    let metadata = fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
+    let metadata =
+        fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
     let modified_at = match metadata.modified() {
         Ok(sys_time) => {
             let dt: DateTime<Utc> = sys_time.into();
@@ -513,7 +521,8 @@ fn read_file(
         return Err("File does not exist".to_string());
     }
 
-    let metadata = fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
+    let metadata =
+        fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
     println!(
         "[LargeFile] read_file metadata path={} size={} bytes",
         file_path.to_string_lossy(),
@@ -539,7 +548,8 @@ fn read_file(
         file_path.to_string_lossy(),
         metadata.len()
     );
-    let content = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    let content =
+        fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))?;
     println!(
         "[LargeFile] read_file end path={} bytes={} elapsed_ms={}",
         file_path.to_string_lossy(),
@@ -794,21 +804,28 @@ fn save_large_file_patches(
     );
 
     let mut source = File::open(&file_path).map_err(|e| format!("Failed to open source: {}", e))?;
-    let mut target = File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let mut target =
+        File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
     let replaced_bytes = sorted_patches
         .iter()
         .map(|patch| patch.end.saturating_sub(patch.start))
         .sum::<u64>();
     let inserted_bytes = sorted_patches
         .iter()
-        .map(|patch| patch.text.as_bytes().len() as u64)
+        .map(|patch| patch.text.len() as u64)
         .sum::<u64>();
     let total_output_bytes = file_size
         .saturating_sub(replaced_bytes)
         .saturating_add(inserted_bytes);
     let mut written_bytes = 0_u64;
     let mut last_progress_emit = 0_u64;
-    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Preparing");
+    emit_large_file_save_progress(
+        &app,
+        &request_id,
+        written_bytes,
+        total_output_bytes,
+        "Preparing",
+    );
 
     let mut report_progress = |bytes: u64| -> Result<(), String> {
         written_bytes = written_bytes.saturating_add(bytes);
@@ -829,14 +846,26 @@ fn save_large_file_patches(
 
     let mut cursor = 0;
     for patch in &sorted_patches {
-        stream_copy_range(&mut source, &mut target, cursor, patch.start, &mut report_progress)?;
+        stream_copy_range(
+            &mut source,
+            &mut target,
+            cursor,
+            patch.start,
+            &mut report_progress,
+        )?;
         target
             .write_all(patch.text.as_bytes())
             .map_err(|e| format!("Failed to write patch: {}", e))?;
-        report_progress(patch.text.as_bytes().len() as u64)?;
+        report_progress(patch.text.len() as u64)?;
         cursor = patch.end;
     }
-    stream_copy_range(&mut source, &mut target, cursor, file_size, &mut report_progress)?;
+    stream_copy_range(
+        &mut source,
+        &mut target,
+        cursor,
+        file_size,
+        &mut report_progress,
+    )?;
     target
         .flush()
         .map_err(|e| format!("Failed to flush temp file: {}", e))?;
@@ -848,13 +877,28 @@ fn save_large_file_patches(
 
     fs::rename(&file_path, &backup_path)
         .map_err(|e| format!("Failed to create backup before replace: {}", e))?;
-    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Replacing");
+    emit_large_file_save_progress(
+        &app,
+        &request_id,
+        written_bytes,
+        total_output_bytes,
+        "Replacing",
+    );
 
     if let Err(e) = fs::rename(&temp_path, &file_path) {
         let _ = fs::rename(&backup_path, &file_path);
-        return Err(format!("Failed to replace original file; backup restored: {}", e));
+        return Err(format!(
+            "Failed to replace original file; backup restored: {}",
+            e
+        ));
     }
-    emit_large_file_save_progress(&app, &request_id, total_output_bytes, total_output_bytes, "Complete");
+    emit_large_file_save_progress(
+        &app,
+        &request_id,
+        total_output_bytes,
+        total_output_bytes,
+        "Complete",
+    );
 
     let new_size = fs::metadata(&file_path)
         .map_err(|e| format!("Failed to read saved metadata: {}", e))?
