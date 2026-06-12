@@ -1,0 +1,38 @@
+# MDX Components Example
+
+This file demonstrates MDX syntax inside EXT.
+
+## Imports and Exports
+
+import { Alert } from './components/Alert'
+
+export const metadata = {
+  title: 'MDX Example',
+  author: 'EXT User',
+}
+
+## Data Table
+
+| Feature       | Status    | Notes              |
+| ------------- | --------- | ------------------ |
+| Headings      | Supported | Standard Markdown  |
+| Tables        | Supported | GFM tables         |
+| Code blocks   | Supported | Fenced with lang   |
+| JSX components| Displayed | Not executed       |
+
+## Code Block
+
+```javascript
+function greet(name) {
+  return `Hello, ${name}!`;
+}
+```
+
+### Using a Component
+
+<Alert type="info">
+  This is a JSX component tag. EXT displays it as plain text rather than
+  rendering it as a React component.
+</Alert>
+
+Regular Markdown content continues here without interruption.

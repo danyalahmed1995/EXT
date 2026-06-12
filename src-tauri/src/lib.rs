@@ -32,13 +32,13 @@ fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBu
 }
 
 fn is_markdown_extension(ext: &str) -> bool {
-    matches!(ext.to_lowercase().as_str(), "md" | "markdown")
+    matches!(ext.to_lowercase().as_str(), "md" | "markdown" | "mdx")
 }
 
 fn is_supported_editable_extension(ext: &str) -> bool {
     matches!(
         ext.to_lowercase().as_str(),
-        "md" | "markdown" | "txt" | "json" | "yml" | "yaml"
+        "md" | "markdown" | "mdx" | "txt" | "json" | "yml" | "yaml"
     )
 }
 
@@ -281,7 +281,8 @@ fn create_file(
     let ext_lower = ext.to_lowercase();
     if !is_supported_editable_extension(&ext_lower) {
         return Err(
-            "Only .md, .markdown, .txt, .json, .yml, and .yaml files are supported".to_string(),
+            "Only .md, .markdown, .mdx, .txt, .json, .yml, and .yaml files are supported"
+                .to_string(),
         );
     }
 
@@ -1306,14 +1307,21 @@ mod tests {
     #[test]
     fn test_supported_editable_extensions() {
         for ext in [
-            "md", "markdown", "txt", "json", "yml", "yaml", "JSON", "YAML",
+            "md", "markdown", "mdx", "txt", "json", "yml", "yaml", "JSON", "YAML", "MDX",
         ] {
             assert!(is_supported_editable_extension(ext));
         }
 
-        for ext in ["mdx", "toml", "xml", "ini", "env", "js", "ts"] {
+        for ext in ["toml", "xml", "ini", "env", "js", "ts"] {
             assert!(!is_supported_editable_extension(ext));
         }
+    }
+
+    #[test]
+    fn test_mdx_is_markdown() {
+        assert!(is_markdown_extension("mdx"));
+        assert!(is_markdown_extension("MDX"));
+        assert!(is_markdown_extension("Mdx"));
     }
 
     #[test]

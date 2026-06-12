@@ -1,0 +1,35 @@
+{
+  "total_uncompressed_bytes": 5303412,
+  "files": [
+    {
+      "path": "01-large-doc.mdx",
+      "bytes": 1250171,
+      "sha256": "e89258356b6e8612d1a2ef68a2d15c8c1b10d4f49bee3e95fe30546cc1a9b289"
+    },
+    {
+      "path": "02-component-gallery.mdx",
+      "bytes": 1050691,
+      "sha256": "a6a21e11aeada2ef544f2f64c5c60712a7d00bd94fe5e8052ca87d7d86769688"
+    },
+    {
+      "path": "03-long-table.mdx",
+      "bytes": 1000752,
+      "sha256": "1a9ef4687d589ec48f40938b8198b267b6f416378bf9b459c70bfeaffbe819d7"
+    },
+    {
+      "path": "04-code-heavy.mdx",
+      "bytes": 1050671,
+      "sha256": "5245e8fcdb0ce13877b04abfdaf4325261734f72394b9d0717b2d48a087ff4e4"
+    },
+    {
+      "path": "05-mixed-content.MDX",
+      "bytes": 950851,
+      "sha256": "feb3e3f9f30d0dd8c89046c4a7c46062c3cd058091ec751418a13d0731254a0d"
+    },
+    {
+      "path": "README.md",
+      "bytes": 276,
+      "sha256": "3cbfc06a3af91d4fc9ae5f1e7999bc1c7a507b7e832db8cb3f6ea43be52c5c37"
+    }
+  ]
+}

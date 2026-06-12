@@ -1,0 +1,30 @@
+{
+  "total_uncompressed_bytes": 2051,
+  "files": [
+    {
+      "path": "01-basic-page.mdx",
+      "bytes": 699,
+      "sha256": "8666d5b2b36cbd8240f86fdf095ca1eb39a13998cb062fb49e9d9ba22eab876a"
+    },
+    {
+      "path": "02-components-demo.mdx",
+      "bytes": 395,
+      "sha256": "36b66f7f939d83e89244c700f70f4fbeff9acf66a93999a001c0a83c44833a98"
+    },
+    {
+      "path": "03-docs-with-table.mdx",
+      "bytes": 418,
+      "sha256": "32fa33c9da9fcbaf3bf4946ecc7c121e521d8dd7b6b0f2ad45a24ab4b8d7bdd5"
+    },
+    {
+      "path": "04-uppercase-extension.MDX",
+      "bytes": 223,
+      "sha256": "7cb052fa052de2cc1eeafb03037db594ec1d31c41c106cd58f813229e59fc677"
+    },
+    {
+      "path": "README.md",
+      "bytes": 316,
+      "sha256": "baf5c3ec945be26ae3f5fdacff2dd28d5b96994066776b21499ecb1040214f8c"
+    }
+  ]
+}

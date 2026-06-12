@@ -52,4 +52,20 @@ describe('file type detection', () => {
     expect(isEditableTextFile('unknown.bin')).toBe(false);
     expect(isMarkdownFile('unknown.bin')).toBe(false);
   });
+
+  it('recognises .mdx as a markdown file', () => {
+    expect(getFileType('page.mdx')).toBe('markdown');
+    expect(isMarkdownFile('page.mdx')).toBe(true);
+    expect(isEditableTextFile('page.mdx')).toBe(true);
+    expect(isPreviewableMarkdownFile('page.mdx')).toBe(true);
+    expect(supportsOutline('page.mdx')).toBe(true);
+    expect(getEditorLanguage('page.mdx')).toBe('markdown');
+  });
+
+  it('handles .mdx case-insensitively', () => {
+    expect(getFileType('README.MDX')).toBe('markdown');
+    expect(getFileType('Hero.Mdx')).toBe('markdown');
+    expect(isMarkdownFile('DOCS.MDX')).toBe(true);
+    expect(getEditorLanguage('guide.MDX')).toBe('markdown');
+  });
 });

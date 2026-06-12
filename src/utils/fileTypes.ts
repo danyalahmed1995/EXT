@@ -13,7 +13,7 @@ interface FileTypeDefinition {
 const FILE_TYPES: readonly FileTypeDefinition[] = [
   {
     id: 'markdown',
-    extensions: ['.md', '.markdown'],
+    extensions: ['.md', '.markdown', '.mdx'],
     editable: true,
     previewable: true,
     outlineSupported: true,
