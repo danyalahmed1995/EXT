@@ -24,6 +24,10 @@ export const LARGE_FILE_THRESHOLD_OPTIONS: Array<{ value: LargeFileThresholdPres
   { value: 'custom', label: 'Custom' },
 ];
 
+export const SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS = LARGE_FILE_THRESHOLD_OPTIONS.filter(
+  (option) => option.value !== 'custom',
+);
+
 export type FileOpenMode = 'normal' | 'large-warning' | 'large-file';
 
 export interface LargeFileMetadata {
@@ -91,10 +95,18 @@ export interface LargeFileSessionState {
 }
 
 export function normalizeLargeFileSettings(settings?: Partial<LargeFileSettings>): LargeFileSettings {
+  const thresholdPreset = settings?.thresholdPreset && SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS.some((option) => option.value === settings.thresholdPreset)
+    ? settings.thresholdPreset
+    : DEFAULT_LARGE_FILE_SETTINGS.thresholdPreset;
+
   return {
     ...DEFAULT_LARGE_FILE_SETTINGS,
     ...settings,
-    thresholdPreset: settings?.thresholdPreset ?? DEFAULT_LARGE_FILE_SETTINGS.thresholdPreset,
+    autoEnable: settings?.autoEnable !== false,
+    askBeforeOpening: false,
+    allowNormalEditor: false,
+    showDetailsPanel: settings?.showDetailsPanel ?? DEFAULT_LARGE_FILE_SETTINGS.showDetailsPanel,
+    thresholdPreset,
     customThresholdMb: Number.isFinite(settings?.customThresholdMb)
       ? Math.max(1, settings?.customThresholdMb ?? DEFAULT_LARGE_FILE_SETTINGS.customThresholdMb)
       : DEFAULT_LARGE_FILE_SETTINGS.customThresholdMb,
@@ -111,7 +123,9 @@ export function getLargeFileThresholdBytes(settings?: Partial<LargeFileSettings>
 }
 
 export function shouldUseLargeFileEngine(size: number, settings?: Partial<LargeFileSettings>): boolean {
-  return size > getLargeFileThresholdBytes(settings)
+  const normalized = normalizeLargeFileSettings(settings);
+  if (!normalized.autoEnable) return size > NORMAL_EDITOR_HARD_LIMIT_BYTES || size >= ONE_GIB_BYTES;
+  return size > getLargeFileThresholdBytes(normalized)
     || size > NORMAL_EDITOR_HARD_LIMIT_BYTES
     || size >= ONE_GIB_BYTES;
 }

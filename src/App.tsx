@@ -8,6 +8,7 @@ import { RenameModal } from './components/modals/RenameModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu } from './components/context-menu/ContextMenu';
 import { DndContext, pointerWithin } from '@dnd-kit/core';
+import { normalizeLargeFileSettings } from './utils/largeFile';
 
 
 import { useAppLogic } from './hooks/useAppLogic';
@@ -79,6 +80,7 @@ function App() {
   const activeTabMemo = useMemo(() => openTabs.find(t => t.id === activeFileId), [openTabs, activeFileId]);
   const activeFileContent = activeTabMemo?.isLargeFile ? undefined : activeTabMemo?.content;
   const activeFileExtension = activeTabMemo?.extension;
+  const largeFileSettings = normalizeLargeFileSettings(appearance.largeFileMode);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -255,7 +257,7 @@ function App() {
             onNewFile={() => setShowNewFileModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
             previewKey={previewKey}
-            showLargeFileDetails={appearance.largeFileMode.showDetailsPanel}
+            showLargeFileDetails={largeFileSettings.showDetailsPanel}
           />
         }
       />

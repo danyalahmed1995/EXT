@@ -3,7 +3,7 @@ import "./SettingsModal.css";
 import { EXTIcon, GitHubIcon } from '../../icons/icons';
 import { AppearanceSettings, LargeFileSettings, LargeFileThresholdPreset } from '../../types';
 import { openUrl } from '@tauri-apps/plugin-opener';
-import { LARGE_FILE_THRESHOLD_OPTIONS, NORMAL_EDITOR_HARD_LIMIT_BYTES, formatBytes, normalizeLargeFileSettings } from '../../utils/largeFile';
+import { SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS, normalizeLargeFileSettings } from '../../utils/largeFile';
 
 interface SettingsModalProps {
 	appearance: AppearanceSettings;
@@ -88,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 		}
 	};
 
-	const selectedThresholdLabel = LARGE_FILE_THRESHOLD_OPTIONS.find(
+	const selectedThresholdLabel = SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS.find(
 		(option) => option.value === largeFileMode.thresholdPreset,
 	)?.label ?? "100 MB";
 
@@ -229,20 +229,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					<section className="settings-section">
 						<h3>Large Files</h3>
 						<p className="settings-desc">
-							Use EXT's streaming text editor for very large files.
+							Open very large files in safe mode without loading the full document.
 						</p>
 
 						<div className="settings-toggles large-file-settings">
 							<label className="settings-toggle">
 								<input
 									type="checkbox"
-									checked
-									readOnly
-									disabled
+									checked={largeFileMode.autoEnable}
+									onChange={() => updateLargeFileMode({ autoEnable: !largeFileMode.autoEnable })}
 								/>
 								<span className="toggle-copy">
-									<span className="toggle-label">Use streaming text editor for huge files</span>
-									<span className="toggle-desc">Always used when a file is too large for the normal editor.</span>
+									<span className="toggle-label">Open very large files in safe mode</span>
+									<span className="toggle-desc">Prevents huge files from entering the normal editor, preview, outline, and math renderer.</span>
 								</span>
 							</label>
 
@@ -266,7 +265,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 										</button>
 										{isThresholdMenuOpen && (
 											<div className="settings-select-menu" role="listbox" aria-labelledby="large-file-threshold">
-												{LARGE_FILE_THRESHOLD_OPTIONS.map((option) => (
+												{SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS.map((option) => (
 													<button
 														key={option.value}
 														type="button"
@@ -284,57 +283,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 											</div>
 										)}
 									</div>
-									{largeFileMode.thresholdPreset === 'custom' && (
-										<input
-											type="number"
-											min={1}
-											step={1}
-											value={largeFileMode.customThresholdMb}
-											onChange={(event) => updateLargeFileMode({ customThresholdMb: Number(event.target.value) || 1 })}
-											aria-label="Custom large file threshold in MB"
-										/>
-									)}
 								</div>
 								<p className="settings-inline-desc">
-									Files above this size use the streaming editor. Files above {formatBytes(NORMAL_EDITOR_HARD_LIMIT_BYTES)} always stream to avoid loading the whole document.
+									Files above this size open in Large File Mode. The default is 100 MB.
 								</p>
 							</div>
-
-							<label className="settings-toggle">
-								<input
-									type="checkbox"
-									checked={!largeFileMode.askBeforeOpening}
-									onChange={() => updateLargeFileMode({ askBeforeOpening: !largeFileMode.askBeforeOpening })}
-								/>
-								<span className="toggle-copy">
-									<span className="toggle-label">Open large files directly without confirmation</span>
-									<span className="toggle-desc">Skip confirmation and use the optimized editor immediately.</span>
-								</span>
-							</label>
-
-							<label className="settings-toggle">
-								<input
-									type="checkbox"
-									checked={largeFileMode.showDetailsPanel}
-									onChange={() => updateLargeFileMode({ showDetailsPanel: !largeFileMode.showDetailsPanel })}
-								/>
-								<span className="toggle-copy">
-									<span className="toggle-label">Show compact large-file status/details</span>
-									<span className="toggle-desc">Show metadata and engine details in a collapsible section.</span>
-								</span>
-							</label>
-
-							<label className="settings-toggle settings-toggle-warning">
-								<input
-									type="checkbox"
-									checked={largeFileMode.allowNormalEditor}
-									onChange={() => updateLargeFileMode({ allowNormalEditor: !largeFileMode.allowNormalEditor })}
-								/>
-								<span className="toggle-copy">
-									<span className="toggle-label">Allow risky normal editor for borderline large files</span>
-									<span className="toggle-desc">Advanced. This does not apply to files above the normal editor cap.</span>
-								</span>
-							</label>
 						</div>
 					</section>
 
