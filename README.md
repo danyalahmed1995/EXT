@@ -5,11 +5,11 @@
 <h1 align="center">EXT</h1>
 
 <p align="center">
-  <strong>A local-first workspace for Markdown, MDX, JSON, YAML, Shell Scripts, and plain text files.</strong>
+  <strong>A local workspace for Markdown, MDX, JSON, YAML, shell scripts, and text files.</strong>
 </p>
 
 <p align="center">
-  Your files stay in your folders. EXT just gives them a fast, sharp, desktop home.
+  Open folders you already have. Read, edit, search, preview, and keep your files as normal files on disk.
 </p>
 
 <p align="center">
@@ -18,12 +18,6 @@
   </a>
   <a href="https://github.com/danyalahmed1995/EXT/actions/workflows/release.yml">
     <img alt="Release" src="https://img.shields.io/github/actions/workflow/status/danyalahmed1995/EXT/release.yml?label=Release&style=for-the-badge" />
-  </a>
-  <a href="https://github.com/danyalahmed1995/EXT/stargazers">
-    <img alt="GitHub stars" src="https://img.shields.io/github/stars/danyalahmed1995/EXT?style=for-the-badge" />
-  </a>
-  <a href="https://github.com/danyalahmed1995/EXT/forks">
-    <img alt="GitHub forks" src="https://img.shields.io/github/forks/danyalahmed1995/EXT?style=for-the-badge" />
   </a>
   <a href="./LICENSE">
     <img alt="License" src="https://img.shields.io/github/license/danyalahmed1995/EXT?style=for-the-badge" />
@@ -34,32 +28,114 @@
   <img alt="Tauri" src="https://img.shields.io/badge/Tauri-v2-24C8DB?style=flat-square" />
   <img alt="React" src="https://img.shields.io/badge/React-19-61DAFB?style=flat-square" />
   <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-ready-3178C6?style=flat-square" />
-  <img alt="Local first" src="https://img.shields.io/badge/local--first-filesystem-7C3AED?style=flat-square" />
+  <img alt="Local files" src="https://img.shields.io/badge/local-filesystem-7C3AED?style=flat-square" />
 </p>
 
 ---
 
-EXT is for people with Markdown, MDX, JSON, YAML, Shell Scripts, and text files scattered across projects, notes, docs, repos, and half-finished idea caves.
+EXT is a desktop app for people who keep useful files across folders, projects, notes, repos, and downloads.
 
-It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, `.txt`, and `.sh` (along with other shell extensions and configs), and gives you one place to read, search, edit, preview, and organize them.
+It does not import your files into a vault. It does not sync them to a service. It does not hide them behind a database. You add folders, EXT scans the supported files, and you keep working with the same files every other editor already sees.
 
-You can keep using Git, OneDrive, Dropbox, Syncthing, Obsidian, VS Code, Notepad, Sublime Text, or any other tool alongside EXT. The files remain normal files on disk.
+## What EXT opens
 
-## Why EXT exists
+EXT treats these as editable local files:
 
-Most Markdown tools either want to become your whole world or stay too tiny to manage real folder chaos. EXT sits in the middle: a focused desktop workspace for local Markdown, MDX, and text files, without turning your notes into someone else's database.
+- Markdown: `.md`, `.markdown`
+- MDX: `.mdx`
+- JSON: `.json`
+- YAML: `.yml`, `.yaml`
+- Text: `.txt`
+- Shell scripts: `.sh`, `.bash`, `.zsh`, `.fish`, `.ksh`, `.csh`, `.tcsh`
+- Shell config files: `.bashrc`, `.bash_profile`, `.profile`, `.zshrc`, `.zprofile`, `.zshenv`, `.zlogin`, `.zlogout`, `.kshrc`
+- Extensionless shell scripts with a shell shebang
 
-| You want | EXT gives you |
-| --- | --- |
-| Local folders, not a hosted vault | Workspace scanning over real Markdown, MDX, JSON, YAML, Shell Scripts, and text files |
-| Fast access across many folders | Smart views, filename search, tabs, and recent files |
-| A proper editor without ceremony | CodeMirror 6, autosave, status bar, find/replace, line ending controls |
-| Markdown preview that can survive large files | Demand-driven rendering, chunked preview work, large-doc protection |
-| Desktop app behavior | System tray, native file actions, installer builds, release artifacts |
+Images are shown when Markdown references them, but EXT does not add images to the workspace file list or manage image assets.
+
+## What EXT does
+
+### Workspaces
+
+- Add local folders as workspaces.
+- Browse files from multiple folders in one app.
+- Use smart views for recent files, favorites, Markdown files, text files, modified files, and TODOs.
+- Keep files in their original folders.
+- Remove a workspace from EXT without deleting anything from disk.
+
+### Editing
+
+- Edit files with CodeMirror 6.
+- Use tabs for open files.
+- Switch between editor-only, split, and preview-only layouts.
+- Autosave changes to disk.
+- Use find and replace in the current file.
+- See saved state, file type, encoding, line endings, and Git branch in the status bar.
+- Convert line endings between `LF` and `CRLF`.
+
+### Markdown and MDX preview
+
+- Preview Markdown and MDX files.
+- Render GitHub-Flavored Markdown.
+- Render LaTeX/math-heavy Markdown safely.
+- Use outline navigation from Markdown headings.
+- Print normal Markdown/MDX previews through the native print dialog.
+- Print output uses a plain white page, black text, readable tables, and readable code blocks.
+- Printing is disabled for oversized files so the native print window does not crash.
+
+MDX is treated as Markdown-like source. EXT does not execute imports, exports, JSX, or components.
+
+### JSON, YAML, shell scripts, and text
+
+- Edit JSON and YAML as source files.
+- Edit valid or broken JSON/YAML without forcing schema validation.
+- Edit shell scripts and shell config files as source files.
+- Highlight shell syntax for normal and large supported shell files.
+- Do not execute, source, lint, format, or run shell scripts.
+- Use viewport-bounded highlighting for large structured/source files where needed.
+
+### File actions
+
+- Create files and folders.
+- Rename files.
+- Delete files with confirmation.
+- Reveal files in the system file explorer.
+- Copy absolute file paths.
+- Open files in the system default app.
+- Use context menus from files, tabs, and the editor.
+
+### Large files
+
+EXT is built to avoid freezing on large local files.
+
+- Large Markdown files use demand-driven preview work.
+- Large JSON, YAML, and shell files avoid full-document syntax work when that would hurt responsiveness.
+- Very large files use safer editor paths instead of trying to render everything at once.
+- Huge documents can still be opened externally when a dedicated editor is the better tool.
+
+The goal is simple: keep EXT responsive. It is not trying to become the best tool for every giant file.
+
+### Local Git branch indicator
+
+When the active file is inside a Git repo, EXT shows the current local branch in the status bar. It hides outside Git folders.
+
+This is local-only. EXT does not call GitHub APIs, ask for GitHub login, fetch, pull, push, or manage commits.
+
+## What EXT is not
+
+EXT is not:
+
+- a cloud notes service
+- a hosted vault
+- a collaboration suite
+- a WYSIWYG editor
+- a terminal
+- a Git client
+- an IDE
+- a publishing system
+
+It is a local workspace and editor for common project/doc files.
 
 ## Demo
-
-A quick look at EXT in motion:
 
 ![EXT Demo Part 1](./public/demo-example/demo_part1.gif)
 ![EXT Demo Part 2](./public/demo-example/demo_part2.gif)
@@ -67,168 +143,7 @@ A quick look at EXT in motion:
 ![EXT Demo Part 4](./public/demo-example/demo_part4.gif)
 ![EXT Demo Part 5](./public/demo-example/demo_part5.gif)
 
-Demo media lives in the repository for README and development use. Production builds strip demo media and development examples from the packaged app.
-
-## What EXT is
-
-EXT is a local-first desktop workspace for Markdown, MDX, JSON, YAML, Shell Scripts, and plain text files.
-
-It gives you:
-
-- one place to browse local Markdown, MDX, JSON, YAML, Shell Scripts, and text files
-- fast filename search across connected workspaces
-- smart views for common file groups
-- a clean editor with live Markdown preview
-- tabs, outline navigation, and focus-friendly layouts
-- basic file management without hiding your files
-- line ending controls for `LF` and `CRLF`
-- native handoff to your default external app
-- keyboard-driven navigation
-- themes and visual settings
-- a small production package without bundled demo baggage
-
-## What EXT is not
-
-EXT is not a cloud notes platform, publishing service, collaboration suite, AI workspace, or WYSIWYG editor.
-
-There are no accounts, hosted documents, proprietary sync layers, or hidden note databases. If you want sync, use the filesystem tools you already trust.
-
-## Features
-
-### Local-first workspaces
-
-- Add existing folders as workspaces.
-- EXT scans local folders directly.
-- Supported editable files are shown in the workspace file list: `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, `.txt`, shell scripts (`.sh`, `.bash`, `.zsh`, etc.), and common shell configs (`.bashrc`, `.profile`, etc.). Extensionless scripts are also detected safely via shebang.
-- Common noisy directories such as `.git`, `node_modules`, build output, benchmark output, and cache folders are ignored.
-- Files can still be opened and edited by other applications.
-- Removing a workspace from EXT does not delete the folder from disk.
-
-### File management
-
-- Create Markdown, MDX, JSON, YAML, Shell Scripts, and text files.
-- Create folders.
-- Rename files.
-- Delete files with confirmation.
-- Reveal files in the system file explorer.
-- Copy absolute file paths.
-- Open files in the system default app.
-- Use file, tab, and editor context menus for quick file actions.
-
-### File list path context
-
-The file panel shows the filename first, then a compact path hint underneath it. That keeps the list readable while still making duplicate filenames easy to tell apart.
-
-So when your workspace has three `README.md` files, EXT does not make you play folder roulette.
-
-### Smart views
-
-The sidebar includes quick views for common workflows:
-
-- Recent
-- Favorites
-- All Markdown
-- All Text
-- Modified Today
-- TODOs
-
-### Search and find
-
-- Global file search for quickly opening files by name.
-- In-file find/replace for the current document.
-- Search keeps the app feeling like a workspace, not a maze.
-
-### Editor and preview
-
-- CodeMirror 6 editor.
-- Syntax highlighting for Markdown, MDX, JSON, YAML, Shell, and plain text.
-- Autosave to local disk.
-- Saved/unsaved state indicator.
-- Editor Only, Split View, and Preview Only modes.
-- GitHub-Flavored Markdown preview.
-- LaTeX and math-heavy Markdown preview support.
-- Markdown outline for heading navigation.
-- JSON, YAML, and Shell Scripts edit as source files without preview, outline, schema validation, linting, or formatting.
-- Local image rendering in preview for valid Markdown image paths.
-- Status bar metadata for file type, encoding, line endings, size, and save state.
-- Demand-driven preview rendering for large Markdown files.
-- Viewport-bounded syntax highlighting for large JSON, YAML, and Shell files.
-
-Image files are rendered when referenced from Markdown, but they are not added to the workspace file list and EXT does not manage image assets.
-
-### Line endings
-
-EXT detects the current file line ending style and shows it in the editor status bar.
-
-Supported actions:
-
-- show whether the current file uses `LF` or `CRLF`
-- convert the current file from `LF` to `CRLF`
-- convert the current file from `CRLF` to `LF`
-- preserve the selected line ending style when saving
-
-This keeps Windows, macOS, Linux, Git, and editor tooling from turning a tiny newline into a tiny civil war.
-
-### Tabs and navigation
-
-- Open multiple files in tabs.
-- Switch between tabs quickly.
-- Close the active tab from the tab bar or keyboard.
-- Move between the sidebar, editor, preview, and open tabs without reaching for the mouse every time.
-- Use focus mode when the editor needs the whole stage.
-
-### Keyboard shortcuts
-
-On macOS, use `Cmd` where the table says `Ctrl`/`Cmd`.
-
-| Shortcut | Action |
-| --- | --- |
-| `Ctrl`/`Cmd` + `P` | Focus global file search / quick open |
-| `Ctrl`/`Cmd` + `F` | Open find and replace for the current file |
-| `Ctrl`/`Cmd` + `B` | Toggle the sidebar |
-| `Ctrl`/`Cmd` + `1` | Focus the editor |
-| `Ctrl`/`Cmd` + `2` | Focus the preview / split area |
-| `Ctrl`/`Cmd` + `Tab` | Switch to the next open tab |
-| `Ctrl`/`Cmd` + `Shift` + `Tab` | Switch to the previous open tab |
-| `Ctrl`/`Cmd` + `W` | Close the current tab |
-
-### Themes and visual settings
-
-EXT includes a theme system with built-in themes and custom palette support.
-
-Built-in styles include the default EXT dark theme plus additional looks such as Noir and Sci-Fi. Visual polish can be configured from settings, including animations, transitions, editor focus effects, sidebar effects, and reduced-motion behavior.
-
-### System tray
-
-Closing the window can minimize EXT to the system tray instead of quitting.
-
-From the tray, users can:
-
-- open the app
-- restart the app
-- exit the app
-
-Unsaved changes are protected before restart or exit.
-
-### Production package size
-
-EXT keeps production builds lean by excluding development-only assets from packaged installers.
-
-Production packages do not ship:
-
-- demo GIF media
-- development example workspace resources
-- benchmark datasets
-- generated stress-test Markdown files
-- test fixtures, logs, coverage, and local build noise
-
-Development assets remain in the repository for testing, screenshots, README demos, and benchmarks without bloating the app users install.
-
-### Development examples
-
-Production first launch starts cleanly and does not auto-inject an Examples workspace.
-
-Development builds can still use local examples and demo files when needed. Existing saved user workspaces are left untouched.
+Demo media lives in the repository for README and development use. Production builds strip demo media and development examples from packaged apps.
 
 ## Downloads
 
@@ -240,18 +155,33 @@ Available packages:
 - macOS: `.dmg`
 - Linux: `.deb` and AppImage
 
-### macOS downloads
+### macOS builds
 
 - Apple Silicon Macs, M1/M2/M3/M4: download the `aarch64.dmg`
 - Intel Macs, Core i5/i7/i9: download the `x86_64.dmg`
 
-The macOS builds are currently unsigned and not notarized, so macOS may block them with a warning. These builds are technical preview builds.
+The macOS builds are currently unsigned and not notarized, so macOS may show a warning. These are technical preview builds.
+
+## Keyboard shortcuts
+
+On macOS, use `Cmd` where the table says `Ctrl`/`Cmd`.
+
+| Shortcut | Action |
+| --- | --- |
+| `Ctrl`/`Cmd` + `P` | Focus global file search / quick open |
+| `Ctrl`/`Cmd` + `F` | Open find and replace |
+| `Ctrl`/`Cmd` + `B` | Toggle the sidebar |
+| `Ctrl`/`Cmd` + `1` | Focus the editor |
+| `Ctrl`/`Cmd` + `2` | Focus the preview / split area |
+| `Ctrl`/`Cmd` + `Tab` | Switch to the next tab |
+| `Ctrl`/`Cmd` + `Shift` + `Tab` | Switch to the previous tab |
+| `Ctrl`/`Cmd` + `W` | Close the current tab |
 
 ## Tech stack
 
 - Tauri v2
 - Rust backend
-- React frontend
+- React
 - TypeScript
 - Vite
 - CodeMirror 6
@@ -336,9 +266,9 @@ cargo clippy -- -D warnings
 cargo test
 ```
 
-The repository includes GitHub Actions workflows for frontend and Rust/Tauri checks on pushes and pull requests.
+GitHub Actions run frontend and Rust/Tauri checks on pushes and pull requests.
 
-## Benchmarking performance
+## Benchmarking
 
 To run the large-file responsiveness benchmark:
 
@@ -346,15 +276,9 @@ To run the large-file responsiveness benchmark:
 npm run benchmark:large-md
 ```
 
-This benchmark tests the demand-driven rendering architecture against massive Markdown and LaTeX files, plus viewport-bounded JSON/YAML highlighting on large valid and broken structured files.
+The benchmark covers large Markdown and LaTeX Markdown, plus large valid/broken JSON, YAML, MDX, and shell files where supported.
 
-It verifies:
-
-- background Web Worker processing and HTML chunk generation speed
-- main-thread DOM injection and DOMPurify sanitization latency
-- editor responsiveness while preview work is happening
-- JSON/YAML viewport syntax highlighting without full-document parsing
-- stable memory behavior without OOM crashes
+It checks that EXT stays responsive while heavy files are opened, highlighted, searched, previewed, or routed through the large-file safeguards.
 
 Benchmark files are development assets and are not shipped in production installers.
 
@@ -384,6 +308,6 @@ EXT is licensed under the **GNU General Public License v3.0 or later** (`GPL-3.0
 
 You are free to use, study, modify, and fork EXT. Personal forks and open-source contributions are welcome.
 
-If you distribute a modified version of EXT, you must keep it under the same license and provide the corresponding source code. This keeps EXT and its forks open instead of allowing closed-source rebrands.
+If you distribute a modified version of EXT, you must keep it under the same license and provide the corresponding source code.
 
 The EXT name, logo, icon, screenshots, and other brand assets are not covered by the GPL license grant. Do not use them in a way that suggests your fork or modified build is the official EXT app.
