@@ -159,6 +159,136 @@ const ChunkComponent = React.memo(({ chunk, blockObserver, previewInstanceId }: 
   );
 });
 
+// ── Print Helper ─────────────────────────────────────
+export const printMarkdownDocument = (content: string, absolutePath?: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (!globalWorker) {
+      reject(new Error("Preview worker unavailable"));
+      return;
+    }
+    const renderId = ++globalRenderIdCounter;
+    
+    const handler = (e: MessageEvent) => {
+      const data = e.data;
+      if (data.type === 'full-result' && data.renderId === renderId) {
+        globalWorker?.removeEventListener('message', handler);
+        try {
+          const safe = DOMPurify.sanitize(
+            processLocalImages(data.html, absolutePath),
+            PURIFY_CONFIG
+          );
+          
+          const printContainer = document.createElement('div');
+          printContainer.id = 'ext-print-container';
+          printContainer.className = 'markdown-preview';
+          printContainer.innerHTML = `<div class="markdown-preview-inner">${safe}</div>`;
+          printContainer.style.display = 'none';
+          document.body.appendChild(printContainer);
+
+          const style = document.createElement('style');
+          style.id = 'ext-print-style';
+          style.innerHTML = `
+            @media print {
+              html, body, #root {
+                height: auto !important;
+                min-height: 100% !important;
+                max-height: none !important;
+                overflow: visible !important;
+                position: static !important;
+              }
+
+              body > * { display: none !important; }
+              #ext-print-container { 
+                display: block !important; 
+                position: static !important;
+                width: auto !important;
+                height: auto !important;
+                overflow: visible !important;
+                padding: 0 !important;
+                margin: 0 !important;
+                background: white !important;
+                color: black !important;
+              }
+              
+              #ext-print-container * {
+                -webkit-text-fill-color: black !important;
+                color: black !important;
+                text-shadow: none !important;
+              }
+
+              #ext-print-container h1,
+              #ext-print-container h2,
+              #ext-print-container h3 {
+                background: none !important;
+                page-break-after: avoid;
+              }
+
+              #ext-print-container pre {
+                border: 1px solid #ccc !important;
+                background: #fff !important;
+                white-space: pre-wrap !important;
+                word-break: break-all !important;
+              }
+
+              #ext-print-container pre::before {
+                display: none !important;
+              }
+
+              #ext-print-container table {
+                border-collapse: collapse !important;
+                width: 100% !important;
+                margin-bottom: 20px !important;
+              }
+
+              #ext-print-container th, 
+              #ext-print-container td {
+                border: 1px solid #ccc !important;
+                background: white !important;
+                padding: 8px !important;
+              }
+
+              #ext-print-container img {
+                max-width: 100% !important;
+                height: auto !important;
+                page-break-inside: avoid;
+                display: block;
+              }
+
+              #ext-print-container a {
+                text-decoration: underline !important;
+              }
+            }
+          `;
+          document.head.appendChild(style);
+
+          const cleanup = () => {
+            if (document.body.contains(printContainer)) document.body.removeChild(printContainer);
+            if (document.head.contains(style)) document.head.removeChild(style);
+            window.removeEventListener('afterprint', cleanup);
+          };
+
+          window.addEventListener('afterprint', cleanup);
+          
+          setTimeout(() => {
+            window.print();
+            setTimeout(cleanup, 120000);
+            resolve();
+          }, 50);
+          
+        } catch (err) {
+          reject(err);
+        }
+      } else if (data.type === 'full-error' && data.renderId === renderId) {
+        globalWorker?.removeEventListener('message', handler);
+        reject(new Error(data.error));
+      }
+    };
+    
+    globalWorker.addEventListener('message', handler);
+    globalWorker.postMessage({ type: 'render-full', renderId, content });
+  });
+};
+
 // ── Main Component ───────────────────────────────────
 
 export const MarkdownPreview: React.FC<MarkdownPreviewProps> = React.memo(({ content, absolutePath, isActive = true }) => {

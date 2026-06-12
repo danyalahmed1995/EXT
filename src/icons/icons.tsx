@@ -295,3 +295,12 @@ export const TrashIcon: React.FC<IconProps> = ({ size = 16, className, style }) 
 export const EXTIcon: React.FC<IconProps> = ({ size = 16, className, style }) => (
   <img src="/icon.png" width={size} height={size} className={className} style={{...style, objectFit: 'contain'}} alt="EXT" />
 );
+
+export const PrintIcon: React.FC<IconProps> = ({ size = 16, className, style }) => (
+  <svg width={size} height={size} viewBox="0 0 16 16" fill="none" className={className} style={style}>
+    <path d="M4 6V2h8v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M4 11H2a1 1 0 01-1-1V7a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-1 1h-2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    <rect x="4" y="9" width="8" height="5" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
+    <line x1="6" y1="11.5" x2="10" y2="11.5" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+  </svg>
+);
