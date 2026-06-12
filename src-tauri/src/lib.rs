@@ -1286,6 +1286,79 @@ fn initialize_example_workspace(app_handle: tauri::AppHandle) -> Result<String, 
     }
 }
 
+#[derive(Serialize)]
+pub struct GitStatus {
+    branch_name: String,
+    is_dirty: bool,
+}
+
+#[tauri::command]
+fn fetch_git_status(file_path: String) -> Option<GitStatus> {
+    let path = Path::new(&file_path);
+    let current_dir = if path.is_file() {
+        path.parent()?
+    } else {
+        path
+    };
+
+    let mut repo_root = None;
+    for curr in current_dir.ancestors() {
+        if curr.join(".git").exists() {
+            repo_root = Some(curr.to_path_buf());
+            break;
+        }
+    }
+
+    let repo_root = repo_root?;
+
+    let branch_output = std::process::Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .current_dir(&repo_root)
+        .output()
+        .ok()?;
+
+    if !branch_output.status.success() {
+        return None;
+    }
+
+    let mut branch_name = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+
+    if branch_name == "HEAD" {
+        // detached HEAD, get short hash
+        let hash_output = std::process::Command::new("git")
+            .arg("rev-parse")
+            .arg("--short")
+            .arg("HEAD")
+            .current_dir(&repo_root)
+            .output()
+            .ok()?;
+        if hash_output.status.success() {
+            let short_hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
+            branch_name = format!("detached: {}", short_hash);
+        }
+    }
+
+    let status_output = std::process::Command::new("git")
+        .arg("status")
+        .arg("--porcelain")
+        .current_dir(&repo_root)
+        .output()
+        .ok()?;
+
+    let is_dirty = if status_output.status.success() {
+        !status_output.stdout.is_empty()
+    } else {
+        false
+    };
+
+    Some(GitStatus {
+        branch_name,
+        is_dirty,
+    })
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1313,7 +1386,8 @@ pub fn run() {
             force_exit,
             force_restart,
             open_devtools,
-            initialize_example_workspace
+            initialize_example_workspace,
+            fetch_git_status
         ])
         .setup(|app| {
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;

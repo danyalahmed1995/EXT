@@ -16,6 +16,9 @@ vi.mock('../preview/MarkdownPreview', () => ({
 vi.mock('../theme/ThemeDropdown', () => ({
   ThemeDropdown: () => <div data-testid="theme-dropdown" />
 }));
+vi.mock('../../hooks/useGitStatus', () => ({
+  useGitStatus: () => null
+}));
 
 beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = vi.fn();
