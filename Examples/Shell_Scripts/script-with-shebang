@@ -1,0 +1,10 @@
+#!/usr/bin/env bash
+
+# This is an extensionless shell script
+# It relies on shebang detection!
+
+echo "If you can read this with syntax highlighting,"
+echo "then extensionless shebang detection is working perfectly!"
+
+status=0
+exit $status

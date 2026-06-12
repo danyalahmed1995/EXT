@@ -83,7 +83,9 @@ const FileListItem: React.FC<FileListItemProps> = ({
       <div className="file-item-details">
         <div className="file-item-top-row">
           <span className="file-item-name" title={name}>{name}</span>
-          <span className="file-item-extension">{extension}</span>
+          <span className="file-item-extension">
+            {extension === '__shebang_shell' ? 'Shell Script' : extension}
+          </span>
         </div>
         <span className="file-item-workspace" title={workspace}>{workspace}</span>
       </div>

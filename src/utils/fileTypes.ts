@@ -1,4 +1,4 @@
-export type EditorLanguage = 'markdown' | 'json' | 'yaml' | 'text';
+export type EditorLanguage = 'markdown' | 'json' | 'yaml' | 'text' | 'shell';
 export type FileTypeId = EditorLanguage | 'unsupported';
 
 interface FileTypeDefinition {
@@ -9,6 +9,15 @@ interface FileTypeDefinition {
   outlineSupported: boolean;
   language: EditorLanguage;
 }
+
+export const SHELL_EXTENSIONS = [
+  '.sh', '.bash', '.zsh', '.fish', '.ksh', '.csh', '.tcsh'
+] as const;
+
+export const SHELL_CONFIG_FILES = [
+  '.bashrc', '.bash_profile', '.bash_login', '.profile', 
+  '.zshrc', '.zprofile', '.zshenv', '.zlogin', '.zlogout', '.kshrc'
+] as const;
 
 const FILE_TYPES: readonly FileTypeDefinition[] = [
   {
@@ -43,6 +52,14 @@ const FILE_TYPES: readonly FileTypeDefinition[] = [
     outlineSupported: false,
     language: 'text',
   },
+  {
+    id: 'shell',
+    extensions: [...SHELL_EXTENSIONS, ...SHELL_CONFIG_FILES, '__shebang_shell'],
+    editable: true,
+    previewable: false,
+    outlineSupported: false,
+    language: 'shell',
+  },
 ] as const;
 
 export const SUPPORTED_EDITABLE_EXTENSIONS = FILE_TYPES
@@ -50,7 +67,15 @@ export const SUPPORTED_EDITABLE_EXTENSIONS = FILE_TYPES
   .flatMap((type) => type.extensions);
 
 function normalizeExtension(pathOrExtension: string): string {
+  if (pathOrExtension === '__shebang_shell') return '__shebang_shell';
+
   const fileName = pathOrExtension.split(/[\\/]/).pop() ?? pathOrExtension;
+  const lowerFileName = fileName.toLowerCase();
+  
+  if (SHELL_CONFIG_FILES.includes(lowerFileName as any)) {
+    return lowerFileName;
+  }
+
   if (fileName.startsWith('.') && fileName.indexOf('.', 1) === -1) {
     return fileName.toLowerCase();
   }
@@ -94,6 +119,8 @@ export function getFileTypeLabel(pathOrExtension: string): string {
       return 'JSON';
     case 'yaml':
       return 'YAML';
+    case 'shell':
+      return 'Shell Script';
     case 'text':
       return 'Text';
   }

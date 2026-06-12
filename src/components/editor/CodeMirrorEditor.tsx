@@ -7,9 +7,10 @@ import { json } from '@codemirror/lang-json';
 import { yaml } from '@codemirror/lang-yaml';
 import { languages } from '@codemirror/language-data';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
-import { bracketMatching, foldGutter, indentOnInput } from '@codemirror/language';
+import { bracketMatching, foldGutter, indentOnInput, StreamLanguage } from '@codemirror/language';
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search';
 import { autocompletion } from '@codemirror/autocomplete';
+import { shell } from '@codemirror/legacy-modes/mode/shell';
 import { extEditorTheme, extHighlightStyle } from '../../styles/editor-theme';
 import { getPerfTier } from '../../utils/performanceMode';
 import { markdownCompletionSource } from './markdownAutocomplete';
@@ -176,7 +177,9 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         ? json()
         : editorLanguage === 'yaml'
           ? yaml()
-          : null;
+          : editorLanguage === 'shell'
+            ? StreamLanguage.define(shell)
+            : null;
       const viewportSyntaxExtensions = editorLanguage === 'yaml'
         ? createViewportSyntaxHighlighting(editorLanguage)
         : [];
@@ -191,11 +194,16 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         EditorView.lineWrapping,
       );
     } else {
+      const syntaxExtension = editorLanguage === 'shell' && (tier === 'large' || tier === 'huge')
+        ? StreamLanguage.define(shell)
+        : null;
+
       extensions.splice(
         8,
         0,
         bracketMatching(),
         highlightSelectionMatches(),
+        ...(syntaxExtension ? [syntaxExtension] : []),
         ...createViewportSyntaxHighlighting(editorLanguage),
       );
     }

@@ -158,7 +158,7 @@ export const LargeFileModePanel: React.FC<LargeFileModePanelProps> = ({
         </div>
         <div className="large-file-field">
           <span>Extension</span>
-          <strong>{metadata.extension || 'None'}</strong>
+          <strong>{metadata.extension === '__shebang_shell' ? 'Shell Script' : (metadata.extension || 'None')}</strong>
         </div>
         <div className="large-file-field">
           <span>Modified</span>

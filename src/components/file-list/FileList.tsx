@@ -164,7 +164,9 @@ const FileListItem: React.FC<FileListItemProps> = ({
         <span className="file-list-item-name">{name}</span>
         <div className="file-list-item-meta">
           <span className="file-list-item-workspace" title={absolutePath}>{pathHint}</span>
-          <span className="file-list-item-ext">{extension}</span>
+          <span className="file-list-item-ext">
+            {extension === '__shebang_shell' ? 'Shell Script' : extension}
+          </span>
         </div>
       </div>
 
