@@ -31,6 +31,17 @@ fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBu
     Ok(joined)
 }
 
+fn is_markdown_extension(ext: &str) -> bool {
+    matches!(ext.to_lowercase().as_str(), "md" | "markdown")
+}
+
+fn is_supported_editable_extension(ext: &str) -> bool {
+    matches!(
+        ext.to_lowercase().as_str(),
+        "md" | "markdown" | "txt" | "json" | "yml" | "yaml"
+    )
+}
+
 #[tauri::command]
 fn open_devtools(window: tauri::WebviewWindow) {
     #[cfg(debug_assertions)]
@@ -187,7 +198,7 @@ fn scan_directory(
         if entry_path.is_file() {
             if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
                 let ext_lower = ext.to_lowercase();
-                if ext_lower == "md" || ext_lower == "markdown" || ext_lower == "txt" {
+                if is_supported_editable_extension(&ext_lower) {
                     let name = entry_path
                         .file_name()
                         .unwrap_or_default()
@@ -264,15 +275,17 @@ fn create_file(
     // Check if the extension is valid
     let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
     let ext_lower = ext.to_lowercase();
-    if ext_lower != "md" && ext_lower != "markdown" && ext_lower != "txt" {
-        return Err("Only .md and .txt files are supported".to_string());
+    if !is_supported_editable_extension(&ext_lower) {
+        return Err(
+            "Only .md, .markdown, .txt, .json, .yml, and .yaml files are supported".to_string(),
+        );
     }
 
     if file_path.exists() {
         return Err("File already exists".to_string());
     }
 
-    let content = if ext_lower == "md" || ext_lower == "markdown" {
+    let content = if is_markdown_extension(&ext_lower) {
         format!(
             "# {}\n\n",
             file_path.file_stem().unwrap_or_default().to_string_lossy()
@@ -1244,6 +1257,19 @@ mod tests {
 
         let unsafe_path = resolve_safe_path("/var/workspace", "../../../etc/passwd");
         assert!(unsafe_path.is_err());
+    }
+
+    #[test]
+    fn test_supported_editable_extensions() {
+        for ext in [
+            "md", "markdown", "txt", "json", "yml", "yaml", "JSON", "YAML",
+        ] {
+            assert!(is_supported_editable_extension(ext));
+        }
+
+        for ext in ["mdx", "toml", "xml", "ini", "env", "js", "ts"] {
+            assert!(!is_supported_editable_extension(ext));
+        }
     }
 
     #[test]

@@ -8,15 +8,7 @@ import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/cor
 import { openPath } from '@tauri-apps/plugin-opener';
 import { convertLineEndings, detectLineEnding, prepareContentForSave, type ConvertibleLineEnding } from '../utils/lineEndings';
 import { safeListen } from '../utils/tauriEvents';
-import {
-  DEFAULT_LARGE_FILE_SETTINGS,
-  createLargeFileMetadata,
-  getFileOpenMode,
-  formatBytes,
-  normalizeLargeFileSettings,
-  shouldUseLargeFileEngine,
-} from '../utils/largeFile';
-import type { LargeFileSessionState } from '../utils/largeFile';
+import { isEditableTextFile, isMarkdownFile } from '../utils/fileTypes';
 
 export function useAppLogic() {
 
@@ -67,7 +59,6 @@ export function useAppLogic() {
     ignoredDirs: defaultIgnoredDirs,
     enableProfiler: false,
     previewCentered: false,
-    largeFileMode: DEFAULT_LARGE_FILE_SETTINGS,
   });
 
   const appearanceRef = useRef(appearance);
@@ -90,29 +81,6 @@ export function useAppLogic() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const createMetadataOnlyTab = useCallback((file: FileItem, workspace: Workspace): EditorTab => ({
-    id: file.id,
-    name: file.name,
-    extension: file.extension,
-    content: '',
-    isDirty: false,
-    saveStatus: 'saved',
-    absolutePath: file.absolutePath,
-    lineEnding: 'LF',
-    isLargeFile: true,
-    largeFileMetadata: createLargeFileMetadata(file, appearanceRef.current.largeFileMode),
-    largeFileState: {
-      currentOffset: 0,
-      patches: [],
-      searchResults: [],
-      chunkCache: [],
-      scannedBytes: 0,
-      status: 'Ready.',
-    },
-    workspacePath: workspace.path,
-    relativePath: file.relativePath,
-  }), []);
-
   const readActiveEditorContent = useCallback((tabId: string, fallback: string) => {
     if (tabId !== activeFileId) return fallback;
     const event = new CustomEvent<{ content?: string }>('editor-read-active-content', {
@@ -121,26 +89,6 @@ export function useAppLogic() {
     window.dispatchEvent(event);
     return event.detail.content ?? fallback;
   }, [activeFileId]);
-
-  const chooseLargeFileOpenMode = useCallback(async (file: FileItem): Promise<'large-file' | 'normal' | 'cancel'> => {
-    const settings = normalizeLargeFileSettings(appearanceRef.current.largeFileMode);
-    if (!shouldUseLargeFileEngine(file.size, settings)) return 'normal';
-
-    if (settings.askBeforeOpening) {
-      const openLarge = await ask(
-        `${file.name} is ${formatBytes(file.size)}. Open it with EXT's streaming text editor?`,
-        {
-          title: 'Open File',
-          kind: 'info',
-          okLabel: 'Open',
-          cancelLabel: 'Cancel',
-        },
-      );
-      return openLarge ? 'large-file' : 'cancel';
-    }
-
-    return 'large-file';
-  }, []);
 
   // ── Initialization (Load Persistence) ───────────────
 
@@ -186,16 +134,11 @@ export function useAppLogic() {
           ignoredDirs: defaultIgnoredDirs,
           enableProfiler: false,
           previewCentered: false,
-          largeFileMode: DEFAULT_LARGE_FILE_SETTINGS,
         };
-        const storedAppearance: AppearanceSettings = {
-          ...defaultAppearance,
-          ...(JSON.parse(localStorage.getItem('ext_appearance') || 'null') || {}),
-        };
+        const storedAppearance: AppearanceSettings = JSON.parse(localStorage.getItem('ext_appearance') || 'null') || defaultAppearance;
         if (!storedAppearance.ignoredDirs || !Array.isArray(storedAppearance.ignoredDirs)) {
           storedAppearance.ignoredDirs = defaultIgnoredDirs;
         }
-        storedAppearance.largeFileMode = normalizeLargeFileSettings(storedAppearance.largeFileMode);
         
         setWorkspaces(storedWorkspaces);
         setSortMode(storedSortMode);
@@ -237,39 +180,24 @@ export function useAppLogic() {
           const workspace = storedWorkspaces.find(w => w.id === first.workspaceId);
           
           let content = '';
-          const largeFileSettings = storedAppearance.largeFileMode;
-          const openMode = getFileOpenMode(first.size, largeFileSettings);
-          console.log(`[LargeFile] initial file selection name=${first.name} size=${first.size} mode=${openMode}`);
-          if (workspace && shouldUseLargeFileEngine(first.size, largeFileSettings)) {
-            setActiveFileId(first.id);
-            setOpenTabs([createMetadataOnlyTab(first, workspace)]);
-          } else if (workspace) {
+          if (workspace) {
             try {
-              console.log(`[LargeFile] read start initial path=${first.absolutePath}`);
-              content = await invoke<string>('read_file', {
-                workspacePath: workspace.path,
-                relativePath: first.relativePath,
-                allowLargeFileRead: false,
-              });
-              console.log(`[LargeFile] read end initial path=${first.absolutePath} chars=${content.length}`);
+              content = await invoke<string>('read_file', { workspacePath: workspace.path, relativePath: first.relativePath });
             } catch (e) {
               console.error('Failed to read initial file content:', e);
             }
-
-            setActiveFileId(first.id);
-            setOpenTabs([{
-              id: first.id,
-              name: first.name,
-              extension: first.extension,
-              content,
-              isDirty: false,
-              absolutePath: first.absolutePath,
-              lineEnding: detectLineEnding(content),
-            }]);
-            if (openMode === 'large-warning') {
-              console.warn(`[LargeFile] opened warning-range file ${first.name} (${formatBytes(first.size)}) in normal editor`);
-            }
           }
+
+          setActiveFileId(first.id);
+          setOpenTabs([{
+            id: first.id,
+            name: first.name,
+            extension: first.extension,
+            content,
+            isDirty: false,
+            absolutePath: first.absolutePath,
+            lineEnding: detectLineEnding(content),
+          }]);
         } else {
           setActiveFileId(null);
         }
@@ -281,7 +209,7 @@ export function useAppLogic() {
     }
     
     loadData();
-  }, [createMetadataOnlyTab]);
+  }, []);
 
   // Sync workspaces to localStorage when changed
   useEffect(() => {
@@ -323,8 +251,8 @@ export function useAppLogic() {
 
       recent: Math.min(files.length, 5),
       favorites: files.filter((f) => f.isFavorite).length,
-      allMarkdown: files.filter((f) => f.extension === '.md' || f.extension === '.markdown').length,
-      allText: files.filter((f) => f.extension === '.txt').length,
+      allMarkdown: files.filter((f) => isMarkdownFile(f.extension)).length,
+      allText: files.filter((f) => isEditableTextFile(f.extension) && !isMarkdownFile(f.extension)).length,
       modifiedToday: files.filter((f) => new Date(f.modifiedAt) >= today).length,
       todos: files.filter(
         (f) =>
@@ -357,10 +285,10 @@ export function useAppLogic() {
         result = result.filter((f) => f.isFavorite);
         break;
       case 'allMarkdown':
-        result = result.filter((f) => f.extension === '.md' || f.extension === '.markdown');
+        result = result.filter((f) => isMarkdownFile(f.extension));
         break;
       case 'allText':
-        result = result.filter((f) => f.extension === '.txt');
+        result = result.filter((f) => isEditableTextFile(f.extension) && !isMarkdownFile(f.extension));
         break;
       case 'modifiedToday': {
         const today = new Date();
@@ -457,7 +385,7 @@ export function useAppLogic() {
   // ── File Handlers ─────────────────────────────────
 
   const handleFileSelect = useCallback(
-    async (fileId: string) => {
+    (fileId: string) => {
       const alreadyOpen = openTabs.some((t) => t.id === fileId);
       if (activeFileId === fileId && alreadyOpen) {
         setContextMenu((prev) => (prev === null ? prev : null));
@@ -465,33 +393,19 @@ export function useAppLogic() {
       }
 
       setContextMenu((prev) => (prev === null ? prev : null));
-      if (alreadyOpen) {
-        setActiveFileId((prev) => (prev === fileId ? prev : fileId));
-        return;
-      }
+      setActiveFileId((prev) => (prev === fileId ? prev : fileId));
 
-      if (pendingOpenFileIds.current.has(fileId)) return;
+      if (alreadyOpen || pendingOpenFileIds.current.has(fileId)) return;
 
       const file = filesById.get(fileId);
       const workspace = file ? workspacesById.get(file.workspaceId) : undefined;
       if (!file || !workspace) return;
 
       pendingOpenFileIds.current.add(fileId);
-      const decision = await chooseLargeFileOpenMode(file);
-      if (decision === 'cancel') {
-        pendingOpenFileIds.current.delete(fileId);
-        return;
-      }
-
-      setActiveFileId((prev) => (prev === fileId ? prev : fileId));
-      const openMode = getFileOpenMode(file.size, appearanceRef.current.largeFileMode);
-      const tabStart = performance.now();
-      console.log(`[LargeFile] file selection id=${file.id} name=${file.name} size=${file.size} mode=${openMode} decision=${decision}`);
 
       // Instantly insert a loading tab so the UI doesn't jump to empty.
       setOpenTabs((tabs) => {
         if (tabs.some((t) => t.id === fileId)) return tabs;
-        if (decision === 'large-file') return [...tabs, createMetadataOnlyTab(file, workspace)];
         return [
           ...tabs,
           {
@@ -507,27 +421,11 @@ export function useAppLogic() {
         ];
       });
 
-      if (decision === 'large-file') {
-        pendingOpenFileIds.current.delete(fileId);
-        console.log(`[LargeFile] metadata-only tab ready id=${file.id} elapsed_ms=${(performance.now() - tabStart).toFixed(1)}`);
-        showToast(`Opened ${file.name} (${formatBytes(file.size)})`);
-        return;
-      }
-
-      console.log(`[LargeFile] read start path=${file.absolutePath} size=${file.size}`);
-      invoke<string>('read_file', {
-        workspacePath: workspace.path,
-        relativePath: file.relativePath,
-        allowLargeFileRead: false,
-      }).then((content) => {
-        console.log(`[LargeFile] read end path=${file.absolutePath} chars=${content.length} elapsed_ms=${(performance.now() - tabStart).toFixed(1)}`);
+      invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath }).then((content) => {
         // Update the tab with the real content and stop loading spinner.
         startTransition(() => {
           setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: content || '', lineEnding: detectLineEnding(content || ''), isLoading: false } : t));
         });
-        if (openMode === 'large-warning') {
-          console.warn(`[LargeFile] opened warning-range file ${file.name} (${formatBytes(file.size)}) in normal editor`);
-        }
       }).catch(() => {
         startTransition(() => {
           setOpenTabs((tabs) => tabs.map(t => t.id === fileId ? { ...t, content: '', isLoading: false } : t));
@@ -536,7 +434,7 @@ export function useAppLogic() {
         pendingOpenFileIds.current.delete(fileId);
       });
     },
-    [activeFileId, chooseLargeFileOpenMode, createMetadataOnlyTab, filesById, openTabs, workspacesById]
+    [activeFileId, openTabs, filesById, workspacesById]
   );
 
   const handleTabClose = useCallback(
@@ -574,25 +472,14 @@ export function useAppLogic() {
     const workspace = workspaces.find(w => w.id === file?.workspaceId);
     if (file && workspace) {
       try {
-        const openMode = getFileOpenMode(file.size, appearanceRef.current.largeFileMode);
-        console.log(`[LargeFile] reload requested id=${tabId} size=${file.size} mode=${openMode}`);
-        if (tab?.isLargeFile || shouldUseLargeFileEngine(file.size, appearanceRef.current.largeFileMode)) {
-          setOpenTabs(tabs => tabs.map(t => t.id === tabId ? createMetadataOnlyTab(file, workspace) : t));
-          showToast('File metadata refreshed');
-          return;
-        }
-        const content = await invoke<string>('read_file', {
-          workspacePath: workspace.path,
-          relativePath: file.relativePath,
-          allowLargeFileRead: false,
-        });
+        const content = await invoke<string>('read_file', { workspacePath: workspace.path, relativePath: file.relativePath });
         setOpenTabs(tabs => tabs.map(t => t.id === tabId ? { ...t, content, lineEnding: detectLineEnding(content), isDirty: false } : t));
         showToast('File reloaded');
       } catch (e) {
         showToast('Failed to reload file');
       }
     }
-  }, [openTabs, files, workspaces, createMetadataOnlyTab]);
+  }, [openTabs, files, workspaces]);
 
   const handleClearOtherTabs = useCallback(async (tabId: string) => {
     const hasDirtyOthers = openTabs.some(t => t.id !== tabId && t.isDirty);
@@ -614,27 +501,11 @@ export function useAppLogic() {
     setOpenTabs((tabs) =>
       tabs.map((t) => {
         if (t.id === tabId) {
-          if (t.isLargeFile) return t;
           if (t.content === content) return t;
           return { ...t, content, isDirty: true, saveStatus: 'unsaved' };
         }
         return t;
       })
-    );
-  }, []);
-
-  const handleLargeFileStateChange = useCallback((tabId: string, state: LargeFileSessionState, isDirty: boolean) => {
-    setOpenTabs((tabs) =>
-      tabs.map((tab) =>
-        tab.id === tabId
-          ? {
-              ...tab,
-              largeFileState: state,
-              isDirty,
-              saveStatus: isDirty ? 'unsaved' : 'saved',
-            }
-          : tab,
-      ),
     );
   }, []);
 
@@ -882,21 +753,12 @@ export function useAppLogic() {
       renamedFile.isFavorite = file.isFavorite;
 
       setFiles(prev => prev.map(f => f.id === file.id ? renamedFile : f));
-      if (activeFileId === file.id) {
-        setActiveFileId(newId);
-      }
-      setOpenTabs(prev => prev.map(t => {
-        if (t.id !== file.id) return t;
-        if (t.isLargeFile || shouldUseLargeFileEngine(renamedFile.size, appearanceRef.current.largeFileMode)) {
-          return createMetadataOnlyTab(renamedFile, ws);
-        }
-        return { ...t, id: newId, name: renamedFile.name, extension: renamedFile.extension, absolutePath: renamedFile.absolutePath };
-      }));
+      setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, name: renamedFile.name, extension: renamedFile.extension } : t));
     } catch (err) {
       console.error('Failed to rename file:', err);
       alert(`Failed to rename file: ${err}`);
     }
-  }, [files, workspaces, renameFileTarget, activeFileId, createMetadataOnlyTab]);
+  }, [files, workspaces, renameFileTarget]);
 
   const openRenameWorkspaceModal = useCallback((workspaceId: string) => {
     const ws = workspaces.find(w => w.id === workspaceId);
@@ -994,20 +856,14 @@ export function useAppLogic() {
       }
 
       // Update open tabs if it was open
-      setOpenTabs((prev) =>
-        prev.map((t) => {
-          if (t.id !== fileId) return t;
-          if (t.isLargeFile || shouldUseLargeFileEngine(movedFile.size, appearanceRef.current.largeFileMode)) {
-            return createMetadataOnlyTab(movedFile, targetWs);
-          }
-          return { ...t, id: newFileId, absolutePath: movedFile.absolutePath };
-        })
+      setOpenTabs((prev) => 
+        prev.map((t) => t.id === fileId ? { ...t, id: newFileId } : t)
       );
     } catch (err) {
       console.error('Failed to move file:', err);
       alert(`Failed to move file: ${err}`);
     }
-  }, [files, workspaces, activeFileId, createMetadataOnlyTab]);
+  }, [files, workspaces, activeFileId]);
 
   // ── Save File Handler ───────────────────────────────
 
@@ -1017,10 +873,6 @@ export function useAppLogic() {
     const workspace = workspaces.find((w) => w.id === file?.workspaceId);
 
     if (!tab || !file || !workspace) return;
-    if (tab.isLargeFile) {
-      window.dispatchEvent(new CustomEvent('large-file-save-request', { detail: { tabId } }));
-      return;
-    }
     const latestContent = readActiveEditorContent(tab.id, tab.content);
     if (!tab.isDirty && latestContent === tab.content) return;
 
@@ -1052,12 +904,6 @@ export function useAppLogic() {
   }, [openTabs, files, workspaces, readActiveEditorContent]);
 
   const handleConvertLineEnding = useCallback((tabId: string, target: ConvertibleLineEnding) => {
-    const targetTab = openTabs.find((tab) => tab.id === tabId);
-    if (targetTab?.isLargeFile) {
-      showToast('Line ending conversion is unavailable for this file size.');
-      return;
-    }
-
     setOpenTabs((tabs) =>
       tabs.map((tab) => {
         if (tab.id !== tabId) return tab;
@@ -1071,7 +917,7 @@ export function useAppLogic() {
         };
       })
     );
-  }, [openTabs, readActiveEditorContent]);
+  }, [readActiveEditorContent]);
 
   // ── Delete File Handler ─────────────────────────────
 
@@ -1190,6 +1036,8 @@ export function useAppLogic() {
       const customEvent = e as CustomEvent;
       const { x, y, tabId } = customEvent.detail;
       if (!tabId) return;
+      const tab = openTabs.find((t) => t.id === tabId);
+      const isMarkdownTab = tab ? isMarkdownFile(tab.extension) : false;
 
       setContextMenu({
         x,
@@ -1214,11 +1062,11 @@ export function useAppLogic() {
             shortcut: '',
             onClick: () => handleReloadTab(tabId),
           },
-          {
+          ...(isMarkdownTab ? [{
             label: 'Refresh',
             shortcut: '',
             onClick: () => setPreviewKey(k => k + 1),
-          },
+          }] : []),
           {
             label: 'Clear tabs',
             shortcut: '',
@@ -1243,6 +1091,8 @@ export function useAppLogic() {
       const { x, y, clickedTabId, activeTabId } = customEvent.detail;
       const targetTabId = clickedTabId || activeTabId;
       if (!targetTabId) return;
+      const tab = openTabs.find((t) => t.id === targetTabId);
+      const isMarkdownTab = tab ? isMarkdownFile(tab.extension) : false;
 
       setContextMenu({
         x,
@@ -1257,11 +1107,11 @@ export function useAppLogic() {
             shortcut: '',
             onClick: () => handleReloadTab(targetTabId),
           },
-          {
+          ...(isMarkdownTab ? [{
             label: 'Refresh',
             shortcut: '',
             onClick: () => setPreviewKey(k => k + 1),
-          },
+          }] : []),
           {
             label: 'Clear tabs',
             shortcut: '',
@@ -1416,14 +1266,6 @@ export function useAppLogic() {
       });
       
       if (new Date(diskModifiedTime).getTime() > new Date(file.modifiedAt).getTime()) {
-        if (tab.isLargeFile || shouldUseLargeFileEngine(file.size, appearanceRef.current.largeFileMode)) {
-          const refreshedFile = { ...file, modifiedAt: diskModifiedTime };
-          setFiles(prev => prev.map(f => f.id === file.id ? refreshedFile : f));
-          setOpenTabs(prev => prev.map(t => t.id === file.id ? createMetadataOnlyTab(refreshedFile, ws) : t));
-          console.log(`[LargeFile] external modification metadata refresh id=${file.id} size=${file.size}`);
-          return;
-        }
-
         if (tab.isDirty) {
           const confirmed = await ask('This file changed outside EXT. Reloading will replace your unsaved changes.', {
             title: 'External Modification',
@@ -1435,8 +1277,7 @@ export function useAppLogic() {
           if (confirmed) {
             const newContent = await invoke<string>('read_file', {
               workspacePath: ws.path,
-              relativePath: file.relativePath,
-              allowLargeFileRead: false,
+              relativePath: file.relativePath
             });
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
             setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent), isDirty: false, saveStatus: 'saved' } : t));
@@ -1446,8 +1287,7 @@ export function useAppLogic() {
         } else {
           const newContent = await invoke<string>('read_file', {
             workspacePath: ws.path,
-            relativePath: file.relativePath,
-            allowLargeFileRead: false,
+            relativePath: file.relativePath
           });
           setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
           setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent) } : t));
@@ -1456,7 +1296,7 @@ export function useAppLogic() {
     } catch (e) {
       console.error('Error checking external modification', e);
     }
-  }, [activeFileId, files, openTabs, workspaces, handleTabClose, createMetadataOnlyTab]);
+  }, [activeFileId, files, openTabs, workspaces, handleTabClose]);
 
   useEffect(() => {
     return safeListen('tauri://focus', handleWindowFocus);
@@ -1663,7 +1503,6 @@ export function useAppLogic() {
     handleCreateFolder,
     handleMoveFile,
     handleSaveFile,
-    handleLargeFileStateChange,
     handleConvertLineEnding,
     handleDeleteFile,
     handleCopyFile,

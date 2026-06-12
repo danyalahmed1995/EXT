@@ -202,6 +202,37 @@ export const extEditorTheme: Extension = EditorView.theme(
       color: 'var(--color-accent)',
       textDecoration: 'underline',
     },
+    // Viewport-bounded JSON/YAML fallback styles for large structured files.
+    '.cm-large-json-key, .cm-large-yaml-key, .cm-large-yaml-top-key': {
+      color: 'var(--color-syntax-name)',
+      fontWeight: 600,
+    },
+    '.cm-large-yaml-top-key': {
+      color: 'var(--color-syntax-keyword)',
+    },
+    '.cm-large-json-string, .cm-large-yaml-string': {
+      color: 'var(--color-syntax-string)',
+    },
+    '.cm-large-json-number, .cm-large-yaml-number': {
+      color: 'var(--color-syntax-type)',
+    },
+    '.cm-large-json-atom, .cm-large-yaml-atom': {
+      color: 'var(--color-syntax-constant)',
+    },
+    '.cm-large-json-punctuation, .cm-large-yaml-punctuation': {
+      color: 'var(--color-syntax-operator)',
+    },
+    '.cm-large-yaml-anchor': {
+      color: 'var(--color-syntax-function)',
+    },
+    '.cm-large-yaml-document, .cm-large-yaml-list': {
+      color: 'var(--color-syntax-operator)',
+      fontWeight: 600,
+    },
+    '.cm-large-yaml-comment': {
+      color: 'var(--color-syntax-comment)',
+      fontStyle: 'italic',
+    },
   },
   { dark: true }
 );
@@ -215,7 +246,9 @@ export const extHighlightStyle = syntaxHighlighting(
     { tag: [t.name, t.deleted, t.character, t.propertyName, t.macroName], color: 'var(--color-syntax-name)' },
     { tag: [t.function(t.variableName), t.labelName], color: 'var(--color-syntax-function)' },
     { tag: [t.color, t.constant(t.name), t.standard(t.name)], color: 'var(--color-syntax-constant)' },
-    { tag: [t.definition(t.name), t.separator], color: 'var(--color-syntax-name)' },
+    { tag: [t.definition(t.name), t.definition(t.propertyName)], color: 'var(--color-syntax-name)', fontWeight: 600 },
+    { tag: t.separator, color: 'var(--color-syntax-operator)' },
+    { tag: [t.lineComment], color: 'var(--color-syntax-comment)', fontStyle: 'italic' },
     { tag: [t.typeName, t.className, t.number, t.changed, t.annotation, t.modifier, t.self, t.namespace], color: 'var(--color-syntax-type)' },
     { tag: [t.operator, t.operatorKeyword, t.url, t.escape, t.regexp, t.link, t.special(t.string)], color: 'var(--color-syntax-operator)' },
     { tag: [t.meta, t.comment], color: 'var(--color-syntax-comment)', fontStyle: 'italic' },

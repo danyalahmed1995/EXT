@@ -3,6 +3,8 @@ import { EditorView, lineNumbers, highlightActiveLine, highlightSpecialChars, dr
 import { EditorState } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { markdown } from '@codemirror/lang-markdown';
+import { json } from '@codemirror/lang-json';
+import { yaml } from '@codemirror/lang-yaml';
 import { languages } from '@codemirror/language-data';
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands';
 import { bracketMatching, foldGutter, indentOnInput } from '@codemirror/language';
@@ -13,6 +15,8 @@ import { getPerfTier } from '../../utils/performanceMode';
 import { markdownCompletionSource } from './markdownAutocomplete';
 import { createViewportSmartEditingPlugin } from './viewportSmartEditing';
 import { hugeMarkdownSyntaxPlugin } from './hugeMarkdownSyntax';
+import { createViewportSyntaxHighlighting } from './viewportSyntaxHighlighting';
+import type { EditorLanguage } from '../../utils/fileTypes';
 
 interface CodeMirrorEditorProps {
   activeTabId: string;
@@ -20,6 +24,7 @@ interface CodeMirrorEditorProps {
   onChange?: (tabId: string, content: string) => void;
   onSave?: (tabId: string) => void;
   isActive?: boolean;
+  language?: EditorLanguage;
 }
 
 interface CachedState {
@@ -27,6 +32,7 @@ interface CachedState {
   scrollTop: number;
   scrollLeft: number;
   contentLength: number;
+  language: EditorLanguage;
 }
 
 const MAX_CACHED_STATES = 6;
@@ -46,6 +52,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   onChange,
   onSave,
   isActive,
+  language = 'markdown',
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
@@ -80,7 +87,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     pendingChangeTimers.current.set(tabId, timer);
   }, [clearPendingChange]);
 
-  const createExtensions = useCallback((tabId: string, contentLength: number): Extension[] => {
+  const createExtensions = useCallback((tabId: string, contentLength: number, editorLanguage: EditorLanguage): Extension[] => {
     const t0 = performance.now();
     const tier = getPerfTier(contentLength);
     const extensions: Extension[] = [
@@ -127,7 +134,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       }),
     ];
 
-    if (tier === 'normal') {
+    if (editorLanguage === 'markdown' && tier === 'normal') {
       const tLang = performance.now();
       const mdExt = markdown({ codeLanguages: languages });
       const mdElapsed = performance.now() - tLang;
@@ -144,7 +151,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         EditorView.lineWrapping,
         autocompletion({ override: [markdownCompletionSource] }),
       );
-    } else if (tier === 'large') {
+    } else if (editorLanguage === 'markdown' && tier === 'large') {
       extensions.splice(
         8,
         0,
@@ -154,7 +161,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         createViewportSmartEditingPlugin(tabId, { debounceMs: 500, bufferSize: 1000 }),
         autocompletion({ override: [markdownCompletionSource] }),
       );
-    } else { // huge
+    } else if (editorLanguage === 'markdown') { // huge
       extensions.splice(
         8, 
         0, 
@@ -164,6 +171,33 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         createViewportSmartEditingPlugin(tabId, { debounceMs: 1000, bufferSize: 400 }),
         autocompletion({ override: [markdownCompletionSource] }),
       );
+    } else if (tier === 'normal') {
+      const syntaxExtension = editorLanguage === 'json'
+        ? json()
+        : editorLanguage === 'yaml'
+          ? yaml()
+          : null;
+      const viewportSyntaxExtensions = editorLanguage === 'yaml'
+        ? createViewportSyntaxHighlighting(editorLanguage)
+        : [];
+
+      extensions.splice(
+        8,
+        0,
+        bracketMatching(),
+        highlightSelectionMatches(),
+        ...(syntaxExtension ? [syntaxExtension] : []),
+        ...viewportSyntaxExtensions,
+        EditorView.lineWrapping,
+      );
+    } else {
+      extensions.splice(
+        8,
+        0,
+        bracketMatching(),
+        highlightSelectionMatches(),
+        ...createViewportSyntaxHighlighting(editorLanguage),
+      );
     }
 
     const tTotal = performance.now() - t0;
@@ -172,12 +206,12 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
     return extensions;
   }, [clearPendingChange, scheduleChange]);
 
-  const createEditorState = useCallback((tabId: string, doc: string) => {
+  const createEditorState = useCallback((tabId: string, doc: string, editorLanguage: EditorLanguage) => {
     const tier = getPerfTier(doc.length);
     const t0 = performance.now();
     const state = EditorState.create({
       doc,
-      extensions: createExtensions(tabId, doc.length),
+      extensions: createExtensions(tabId, doc.length, editorLanguage),
     });
     const elapsed = performance.now() - t0;
 
@@ -211,7 +245,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
   useEffect(() => {
     if (!containerRef.current) return;
 
-    const initialState = createEditorState(activeTabId, content);
+    const initialState = createEditorState(activeTabId, content, language);
     const t0 = performance.now();
     const view = new EditorView({
       state: initialState,
@@ -230,6 +264,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       scrollTop: 0,
       scrollLeft: 0,
       contentLength: content.length,
+      language,
     });
 
     requestAnimationFrame(() => {
@@ -257,6 +292,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         scrollTop: view.scrollDOM.scrollTop,
         scrollLeft: view.scrollDOM.scrollLeft,
         contentLength: contentCache.current.get(previousTabId)?.length ?? view.state.doc.length,
+        language,
       });
       enforceCacheLimit(activeTabId);
     }
@@ -269,12 +305,12 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       let scrollTop = cached?.scrollTop ?? 0;
       let scrollLeft = cached?.scrollLeft ?? 0;
 
-      if (!nextState || (!hasPendingLocalChange && cachedContent !== undefined && cachedContent !== content)) {
-        nextState = createEditorState(activeTabId, content);
+      if (!nextState || cached?.language !== language || (!hasPendingLocalChange && cachedContent !== undefined && cachedContent !== content)) {
+        nextState = createEditorState(activeTabId, content, language);
         scrollTop = 0;
         scrollLeft = 0;
       } else if (!nextState) {
-        nextState = createEditorState(activeTabId, cachedContent ?? content);
+        nextState = createEditorState(activeTabId, cachedContent ?? content, language);
       }
 
       const setStateStart = performance.now();
@@ -291,6 +327,7 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         scrollTop,
         scrollLeft,
         contentLength: contentCache.current.get(activeTabId)?.length ?? content.length,
+        language,
       });
       enforceCacheLimit(activeTabId);
 
@@ -305,10 +342,11 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
       return;
     }
 
+    const cached = stateCache.current.get(activeTabId);
     const cachedContent = contentCache.current.get(activeTabId);
     const hasPendingLocalChange = pendingChangeTimers.current.has(activeTabId);
-    if (!hasPendingLocalChange && cachedContent !== content) {
-      const nextState = createEditorState(activeTabId, content);
+    if (cached?.language !== language || (!hasPendingLocalChange && cachedContent !== content)) {
+      const nextState = createEditorState(activeTabId, content, language);
       const setStateStart = performance.now();
       view.setState(nextState);
       const setStateElapsed = performance.now() - setStateStart;
@@ -321,9 +359,10 @@ export const CodeMirrorEditor: React.FC<CodeMirrorEditorProps> = ({
         scrollTop: view.scrollDOM.scrollTop,
         scrollLeft: view.scrollDOM.scrollLeft,
         contentLength: content.length,
+        language,
       });
     }
-  }, [activeTabId, content, createEditorState, enforceCacheLimit]);
+  }, [activeTabId, content, createEditorState, enforceCacheLimit, language]);
 
   useEffect(() => {
     const handleCopy = () => {

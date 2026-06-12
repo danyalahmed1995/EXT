@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FileMarkdownIcon } from '../../icons/icons';
+import { isEditableTextFile } from '../../utils/fileTypes';
 import './Modal.css';
 
 interface WorkspaceOption {
@@ -38,9 +39,9 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (fileName.trim() && workspaceId) {
-      // Ensure extension is .md or .txt
+      // Keep the existing Markdown default while allowing supported companion files.
       let finalName = fileName.trim();
-      if (!finalName.endsWith('.md') && !finalName.endsWith('.markdown') && !finalName.endsWith('.txt')) {
+      if (!isEditableTextFile(finalName)) {
         finalName += '.md';
       }
       onCreate(workspaceId, finalName);
@@ -60,7 +61,7 @@ export const NewFileModal: React.FC<NewFileModalProps> = ({
           <h2 className="modal-title">New File</h2>
         </div>
         <p className="modal-description">
-          Create a new Markdown or text file in your workspace.
+          Create a new Markdown, JSON, YAML, or text file in your workspace.
         </p>
 
         <div className="modal-field">

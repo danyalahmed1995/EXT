@@ -35,6 +35,56 @@ const DOMPurify = createDOMPurify(window);
 const VIEWPORT_BLOCKS = 20;
 /** Main-thread block-time threshold */
 const MAX_BLOCK_MS = 200;
+const SUPPORTED_BENCHMARK_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.json', '.yml', '.yaml']);
+const STRUCTURED_VIEWPORT_CHARS = 60_000;
+
+function getFileType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  if (ext === '.md' || ext === '.markdown') return 'Markdown';
+  if (ext === '.json') return 'JSON';
+  if (ext === '.yml' || ext === '.yaml') return 'YAML';
+  if (ext === '.txt') return 'Text';
+  return 'Other';
+}
+
+function walkBenchmarkFiles(rootDir) {
+  if (!fs.existsSync(rootDir)) return [];
+  const results = [];
+  for (const entry of fs.readdirSync(rootDir, { withFileTypes: true })) {
+    const fullPath = path.join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === 'report') continue;
+      results.push(...walkBenchmarkFiles(fullPath));
+    } else if (SUPPORTED_BENCHMARK_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+      results.push(fullPath);
+    }
+  }
+  return results;
+}
+
+function benchmarkViewportSyntax(content, fileType) {
+  const pattern = fileType === 'JSON'
+    ? /("(?:\\.|[^"\\])*"(?=\s*:))|("(?:\\.|[^"\\])*")|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\btrue\b|\bfalse\b|\bnull\b)|([{}\[\]:,])/g
+    : /(#.*$)|(^\s*[-?]?\s*[^#\n:"']+?(?=\s*:))|("(?:\\.|[^"\\])*"|'[^'\n]*')|(-?\b\d+(?:\.\d+)?(?:[eE][+-]?\d+)?\b)|(\btrue\b|\bfalse\b|\bnull\b|\b~\b)|([{}\[\]:,>-])/gm;
+
+  const starts = [
+    0,
+    Math.max(0, Math.floor(content.length / 2) - Math.floor(STRUCTURED_VIEWPORT_CHARS / 2)),
+    Math.max(0, content.length - STRUCTURED_VIEWPORT_CHARS),
+  ];
+
+  let tokenCount = 0;
+  let maxViewportMs = 0;
+  for (const start of starts) {
+    const sample = content.slice(start, start + STRUCTURED_VIEWPORT_CHARS);
+    pattern.lastIndex = 0;
+    const t0 = performance.now();
+    while (pattern.exec(sample)) tokenCount++;
+    maxViewportMs = Math.max(maxViewportMs, performance.now() - t0);
+  }
+
+  return { tokenCount, maxViewportMs, viewportCount: starts.length };
+}
 
 async function runBenchmark() {
   console.log('--- EXT Large Markdown Benchmark (Demand-Driven) ---');
@@ -429,6 +479,59 @@ async function runBenchmark() {
     }
   } catch (e) {
     log(`Status: FAIL (Exception in Tab Switch Test: ${e.message})`);
+  }
+
+  log('\n--- JSON/YAML VIEWPORT SYNTAX BENCHMARK ---');
+  const structuredFiles = walkBenchmarkFiles(BENCHMARK_DIR)
+    .filter((filePath) => {
+      const type = getFileType(filePath);
+      return type === 'JSON' || type === 'YAML';
+    })
+    .sort();
+
+  if (structuredFiles.length === 0) {
+    log('Skipped (JSON/YAML benchmark files not found)');
+  }
+
+  for (const filePath of structuredFiles) {
+    const fileType = getFileType(filePath);
+    const relativePath = path.relative(BENCHMARK_DIR, filePath);
+    const stat = fs.statSync(filePath);
+    const sizeMB = (stat.size / (1024 * 1024)).toFixed(2);
+    log(`\nFile: ${relativePath}`);
+    log(`Type: ${fileType}`);
+    log(`Size: ${sizeMB} MB`);
+
+    try {
+      const readStart = performance.now();
+      const content = fs.readFileSync(filePath, 'utf8');
+      const readMs = performance.now() - readStart;
+
+      let maxDelay = 0;
+      let lastBeat = performance.now();
+      const hb = setInterval(() => {
+        const now = performance.now();
+        const d = now - lastBeat - 10;
+        if (d > maxDelay) maxDelay = d;
+        lastBeat = now;
+      }, 10);
+
+      const syntaxStart = performance.now();
+      const syntax = benchmarkViewportSyntax(content, fileType);
+      const syntaxMs = performance.now() - syntaxStart;
+      clearInterval(hb);
+
+      log(`Read Time: ${readMs.toFixed(2)} ms`);
+      log(`Viewport Syntax Time: ${syntaxMs.toFixed(2)} ms`);
+      log(`Max Single Viewport Syntax Time: ${syntax.maxViewportMs.toFixed(2)} ms`);
+      log(`Viewport Count: ${syntax.viewportCount}`);
+      log(`Tokens Highlighted: ${syntax.tokenCount}`);
+      log(`Main Thread Max Block Time: ${maxDelay.toFixed(2)} ms`);
+      log(`Status: ${maxDelay > MAX_BLOCK_MS ? 'FAIL' : 'PASS'}`);
+    } catch (err) {
+      log('Status: FAIL (Exception)');
+      log(`Error: ${err.message}`);
+    }
   }
 }
 

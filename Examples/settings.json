@@ -1,0 +1,28 @@
+{
+  "editor": {
+    "theme": "noir",
+    "fontSize": 15,
+    "wordWrap": true,
+    "largeFileMode": true,
+    "syntaxHighlighting": {
+      "json": true,
+      "yaml": true
+    }
+  },
+  "workspace": {
+    "showHiddenFiles": false,
+    "ignoredFolders": [
+      "node_modules",
+      ".git",
+      "dist",
+      "build"
+    ],
+    "supportedExtensions": [
+      ".md",
+      ".txt",
+      ".json",
+      ".yml",
+      ".yaml"
+    ]
+  }
+}

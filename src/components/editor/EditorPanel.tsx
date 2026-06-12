@@ -17,10 +17,7 @@ import {
 import { MarkdownPreview } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
 import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
-import type { LargeFileMetadata } from '../../utils/largeFile';
-import type { LargeFileSessionState } from '../../utils/largeFile';
-import { formatBytes } from '../../utils/largeFile';
-import { LargeFileModePanel } from './LargeFileModePanel';
+import { getEditorLanguage, getFileTypeLabel, isMarkdownFile, isPreviewableMarkdownFile } from '../../utils/fileTypes';
 import './EditorPanel.css';
 
 // ── Types ────────────────────────────────────────────
@@ -39,11 +36,6 @@ export interface EditorTab {
   absolutePath: string;
   isLoading?: boolean;
   lineEnding?: LineEnding;
-  isLargeFile?: boolean;
-  largeFileMetadata?: LargeFileMetadata;
-  largeFileState?: LargeFileSessionState;
-  workspacePath?: string;
-  relativePath?: string;
 }
 
 interface EditorPanelProps {
@@ -55,18 +47,16 @@ interface EditorPanelProps {
   onTabClose: (tabId: string) => void;
   onContentChange: (tabId: string, content: string) => void;
   onSaveFile: (tabId: string) => void;
-  onLargeFileStateChange?: (tabId: string, state: LargeFileSessionState, isDirty: boolean) => void;
   onConvertLineEnding: (tabId: string, target: ConvertibleLineEnding) => void;
   onNewFile: () => void;
   onOpenSettings: () => void;
   previewKey?: number;
-  showLargeFileDetails?: boolean;
 }
 
 // ── Tab Icon Helper ─────────────────────────────────
 
 function getTabIcon(extension: string): React.ReactNode {
-  if (extension === '.md' || extension === '.markdown') {
+  if (isMarkdownFile(extension)) {
     return <FileMarkdownIcon size={14} />;
   }
   return <FileTextIcon size={14} />;
@@ -144,15 +134,12 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
   onTabClose,
   onContentChange,
   onSaveFile,
-  onLargeFileStateChange,
   onConvertLineEnding,
   onNewFile,
   onOpenSettings,
   previewKey,
-  showLargeFileDetails = true,
 }) => {
   const activeTab = tabs.find((t) => t.id === activeTabId);
-  const isStreamingTextTab = Boolean(activeTab?.isLargeFile);
   const [hotEditorTabIds, setHotEditorTabIds] = React.useState<string[]>(() => activeTabId ? [activeTabId] : []);
   const [showLineEndingMenu, setShowLineEndingMenu] = React.useState(false);
 
@@ -223,11 +210,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
 
   const [lineCount, setLineCount] = React.useState<number | null>(null);
   React.useEffect(() => {
-    if (activeTab?.isLargeFile) {
-      setLineCount(null);
-      return;
-    }
-
     const content = activeTab?.content ?? '';
     if (!content) {
       setLineCount(0);
@@ -286,8 +268,10 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
       if (scheduledId) cancel(scheduledId);
     };
   }, [activeTab?.id, activeTab?.content]);
-  const charCount = activeTab?.isLargeFile ? activeTab.largeFileMetadata?.size ?? 0 : activeTab?.content ? activeTab.content.length : 0;
+  const charCount = activeTab?.content ? activeTab.content.length : 0;
   const lineEndingLabel = activeTab?.lineEnding ?? 'LF';
+  const activeTabLanguage = activeTab ? getEditorLanguage(activeTab.extension) : 'text';
+  const activeTabPreviewable = activeTab ? isPreviewableMarkdownFile(activeTab.extension) : false;
 
   if (!activeTab) {
     return (
@@ -379,26 +363,22 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <div className="editor-tab-bar-right">
           <div className="editor-view-switcher">
             <button
-              className={`editor-view-btn ${isStreamingTextTab || viewMode === 'editor' ? 'active' : ''}`}
+              className={`editor-view-btn ${viewMode === 'editor' ? 'active' : ''}`}
               onClick={() => onViewModeChange('editor')}
             >
               <EditorIcon size={13} />
               Editor
             </button>
             <button
-              className={`editor-view-btn ${!isStreamingTextTab && viewMode === 'split' ? 'active' : ''}`}
+              className={`editor-view-btn ${viewMode === 'split' ? 'active' : ''}`}
               onClick={() => onViewModeChange('split')}
-              disabled={isStreamingTextTab}
-              title={isStreamingTextTab ? 'Preview is unavailable for this file size' : 'Split'}
             >
               <SplitIcon size={13} />
               Split
             </button>
             <button
-              className={`editor-view-btn ${!isStreamingTextTab && viewMode === 'preview' ? 'active' : ''}`}
+              className={`editor-view-btn ${viewMode === 'preview' ? 'active' : ''}`}
               onClick={() => onViewModeChange('preview')}
-              disabled={isStreamingTextTab}
-              title={isStreamingTextTab ? 'Preview is unavailable for this file size' : 'Preview'}
             >
               <PreviewIcon size={13} />
               Preview
@@ -429,18 +409,6 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
            <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
            <span>Loading massive file...</span>
         </div>
-      ) : activeTab.isLargeFile && activeTab.largeFileMetadata ? (
-        <div className="editor-content">
-          <LargeFileModePanel
-            tabId={activeTab.id}
-            workspacePath={activeTab.workspacePath}
-            relativePath={activeTab.relativePath}
-            metadata={activeTab.largeFileMetadata}
-            state={activeTab.largeFileState}
-            showDetailsPanel={showLargeFileDetails}
-            onStateChange={(state, isDirty) => onLargeFileStateChange?.(activeTab.id, state, isDirty)}
-          />
-        </div>
       ) : (
       <div className="editor-content" style={{ position: 'relative' }} onContextMenuCapture={handleContextMenu}>
         <div 
@@ -464,19 +432,20 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                     onChange={onContentChange}
                     onSave={onSaveFile}
                     isActive={tab.id === activeTab.id}
+                    language={getEditorLanguage(tab.extension)}
                   />
                 </div>
               ))}
             </div>
           )}
 
-          {(viewMode === 'preview' || viewMode === 'split') && (activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+          {(viewMode === 'preview' || viewMode === 'split') && activeTabPreviewable && (
             <div className={`editor-content-preview ${viewMode === 'preview' ? 'full' : ''}`}>
               <MarkdownPreview key={`${activeTab.id}-${previewKey}`} content={activeTab.content} absolutePath={activeTab.absolutePath} isActive={true} />
             </div>
           )}
 
-          {viewMode === 'preview' && !(activeTab.extension === '.md' || activeTab.extension === '.markdown') && (
+          {viewMode === 'preview' && !activeTabPreviewable && (
             <div className="editor-content-editor full">
               <CodeMirrorEditor
                 activeTabId={activeTab.id}
@@ -484,6 +453,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
                 onChange={onContentChange}
                 onSave={onSaveFile}
                 isActive={true}
+                language={activeTabLanguage}
               />
             </div>
           )}
@@ -496,14 +466,14 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
         <span className="editor-statusbar-item">
           <span className="editor-statusbar-accent">{activeTab.name}</span>
         </span>
-        <span className="editor-statusbar-item">{activeTab.isLargeFile ? 'Text' : `${lineCount == null ? '...' : lineCount} lines`}</span>
-        <span className="editor-statusbar-item">{activeTab.isLargeFile ? formatBytes(charCount) : `${charCount} chars`}</span>
+        <span className="editor-statusbar-item">{lineCount == null ? '...' : lineCount} lines</span>
+        <span className="editor-statusbar-item">{charCount} chars</span>
         <span className="editor-statusbar-item" style={{ color: activeTab.saveStatus === 'error' ? 'var(--color-error)' : activeTab.saveStatus === 'saving' ? 'var(--color-accent)' : activeTab.isDirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}>
           {activeTab.saveStatus === 'error' ? 'Save failed' : activeTab.saveStatus === 'saving' ? 'Saving...' : activeTab.isDirty ? 'Unsaved changes' : 'Saved'}
         </span>
         <div className="editor-statusbar-spacer" />
         <span className="editor-statusbar-item">
-          {activeTab.extension.replace('.', '').toUpperCase()}
+          {getFileTypeLabel(activeTab.extension)}
         </span>
         <span className="editor-statusbar-item">UTF-8</span>
         <div className="editor-statusbar-line-ending">

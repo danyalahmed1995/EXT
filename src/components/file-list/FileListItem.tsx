@@ -1,5 +1,6 @@
 import React from 'react';
 import { FileMarkdownIcon, FileTextIcon, StarIcon, StarFilledIcon } from '../../icons/icons';
+import { isMarkdownFile } from '../../utils/fileTypes';
 
 interface FileListItemProps {
   id: string;
@@ -50,14 +51,9 @@ function formatDate(dateString: string): string {
 }
 
 function getFileIcon(extension: string): React.ReactElement {
-  switch (extension.toLowerCase()) {
-    case '.md':
-    case '.mdx':
-    case '.markdown':
-      return <FileMarkdownIcon className="file-item-icon" />;
-    default:
-      return <FileTextIcon className="file-item-icon" />;
-  }
+  return isMarkdownFile(extension)
+    ? <FileMarkdownIcon className="file-item-icon" />
+    : <FileTextIcon className="file-item-icon" />;
 }
 
 const FileListItem: React.FC<FileListItemProps> = ({
