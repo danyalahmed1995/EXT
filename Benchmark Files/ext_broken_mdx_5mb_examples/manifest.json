@@ -1,0 +1,35 @@
+{
+  "total_uncompressed_bytes": 5251359,
+  "files": [
+    {
+      "path": "01-unclosed-jsx.mdx",
+      "bytes": 1200198,
+      "sha256": "9ae74beecabb9af67a55449e8af60235179fd57bf7bde49fffec805142429051"
+    },
+    {
+      "path": "02-bad-import-export.mdx",
+      "bytes": 1000205,
+      "sha256": "e29355f067b6a91d0fb18999eebd8cb45e0f5ec54b06bf6b49bb0cbfc0371bd1"
+    },
+    {
+      "path": "03-broken-tables-and-fences.mdx",
+      "bytes": 1000204,
+      "sha256": "f5818250e46cf634b1e992148a9a4d0e86807b0340ee280d2fa4225730906c99"
+    },
+    {
+      "path": "04-invalid-expressions.mdx",
+      "bytes": 1050183,
+      "sha256": "0e25945a63e6e53698fb8c131dbc1eb8f4adb65412e833b4455eec1d7af9d554"
+    },
+    {
+      "path": "05-chaos-mixed-case.MDX",
+      "bytes": 1000219,
+      "sha256": "94371555f0de151b1d365d1a7a336999458474ba880569303b17a45f76761e12"
+    },
+    {
+      "path": "README.md",
+      "bytes": 350,
+      "sha256": "0e2815fa474df56fb30f8621b712506f9ed1603bc38a02c60402d81e6724811e"
+    }
+  ]
+}

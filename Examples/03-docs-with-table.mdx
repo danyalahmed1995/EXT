@@ -1,0 +1,23 @@
+# Docs With Table
+
+## API-ish Notes
+
+| Name | Type | Notes |
+|---|---:|---|
+| `title` | `string` | Page title |
+| `draft` | `boolean` | Should stay unchanged |
+| `sections` | `string[]` | Outline should still find headings |
+
+export const draft = false
+
+## Example
+
+```jsx
+<Panel title="Hello EXT">
+  <p>This is source text, not runtime UI.</p>
+</Panel>
+```
+
+## Final Heading
+
+The outline should include this heading.

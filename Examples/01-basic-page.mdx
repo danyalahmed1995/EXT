@@ -1,0 +1,37 @@
+import Alert from './components/Alert'
+
+export const metadata = {
+  title: 'EXT MDX Basic Page',
+  status: 'stable'
+}
+
+# EXT MDX Basic Page
+
+This file mixes Markdown with MDX-ish syntax.
+
+<Alert tone="info">This component should not be executed by EXT.</Alert>
+
+## Quick Table
+
+| Feature | Expected Behavior |
+|---|---|
+| Markdown headings | Outline-safe |
+| Tables | Preview-safe |
+| JSX tags | No crash |
+| Import/export | Preserved as text |
+
+## Code Fence
+
+```ts
+type EditorMode = 'markdown' | 'mdx'
+
+export function describeMode(mode: EditorMode) {
+  return `Current mode: ${mode}`
+}
+```
+
+## Nested JSX-ish Content
+
+<Card title="Preview Safety">
+  <strong>Do not execute this.</strong>
+</Card>

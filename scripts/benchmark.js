@@ -35,12 +35,12 @@ const DOMPurify = createDOMPurify(window);
 const VIEWPORT_BLOCKS = 20;
 /** Main-thread block-time threshold */
 const MAX_BLOCK_MS = 200;
-const SUPPORTED_BENCHMARK_EXTENSIONS = new Set(['.md', '.markdown', '.txt', '.json', '.yml', '.yaml']);
+const SUPPORTED_BENCHMARK_EXTENSIONS = new Set(['.md', '.markdown', '.mdx', '.txt', '.json', '.yml', '.yaml']);
 const STRUCTURED_VIEWPORT_CHARS = 60_000;
 
 function getFileType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
-  if (ext === '.md' || ext === '.markdown') return 'Markdown';
+  if (ext === '.md' || ext === '.markdown' || ext === '.mdx') return 'Markdown';
   if (ext === '.json') return 'JSON';
   if (ext === '.yml' || ext === '.yaml') return 'YAML';
   if (ext === '.txt') return 'Text';
@@ -106,16 +106,24 @@ async function runBenchmark() {
   log(`Viewport Blocks: ${VIEWPORT_BLOCKS}`);
   log('==================================================\n');
 
-  const folders = ['ext-large-md-no-latex', 'ext-large-md-with-latex', 'ext-broken-latex-5mb-md-pack'];
+  const folders = [
+    'ext-large-md-no-latex',
+    'ext-large-md-with-latex',
+    'ext-broken-latex-5mb-md-pack',
+    'ext_heavy_mdx_5mb_examples',
+    'ext_broken_mdx_5mb_examples'
+  ];
   let totalFiles = 0, passed = 0, failed = 0;
 
   for (const folder of folders) {
     const folderPath = path.join(BENCHMARK_DIR, folder);
     if (!fs.existsSync(folderPath)) continue;
-    const files = fs.readdirSync(folderPath).filter(f => f.endsWith('.md'));
+    const files = fs.readdirSync(folderPath).filter(f => f.toLowerCase().endsWith('.md') || f.toLowerCase().endsWith('.mdx'));
     if (files.length === 0) continue;
 
-    const category = folder.includes('no-latex') ? 'Normal Markdown' : 'LaTeX Markdown';
+    let category = 'LaTeX Markdown';
+    if (folder.includes('no-latex')) category = 'Normal Markdown';
+    else if (folder.includes('mdx')) category = 'MDX';
     log(`\n--- CATEGORY: ${category} (${folder}) ---`);
 
     for (const file of files) {
