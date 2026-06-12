@@ -42,6 +42,49 @@ fn is_supported_editable_extension(ext: &str) -> bool {
     )
 }
 
+fn is_shell_extension(ext: &str) -> bool {
+    matches!(
+        ext.to_lowercase().as_str(),
+        "sh" | "bash" | "zsh" | "fish" | "ksh" | "csh" | "tcsh"
+    )
+}
+
+fn is_shell_config_file(filename: &str) -> bool {
+    matches!(
+        filename.to_lowercase().as_str(),
+        ".bashrc" | ".bash_profile" | ".bash_login" | ".profile" | 
+        ".zshrc" | ".zprofile" | ".zshenv" | ".zlogin" | ".zlogout" | ".kshrc"
+    )
+}
+
+fn is_shell_script_by_shebang(path: &Path) -> bool {
+    let mut file = match std::fs::File::open(path) {
+        Ok(f) => f,
+        Err(_) => return false,
+    };
+    let mut buffer = [0; 64];
+    let bytes_read = match std::io::Read::read(&mut file, &mut buffer) {
+        Ok(n) => n,
+        Err(_) => return false,
+    };
+    
+    if bytes_read < 2 || &buffer[0..2] != b"#!" {
+        return false;
+    }
+    
+    let first_line = String::from_utf8_lossy(&buffer[..bytes_read]);
+    let shebang = first_line.lines().next().unwrap_or("").trim();
+    
+    matches!(
+        shebang,
+        "#!/bin/sh" | "#!/bin/bash" | "#!/usr/bin/bash" | 
+        "#!/usr/bin/env sh" | "#!/usr/bin/env bash" | 
+        "#!/usr/bin/env zsh" | "#!/usr/bin/env fish" | 
+        "#!/usr/bin/env ksh" | "#!/usr/bin/env csh" | 
+        "#!/usr/bin/env tcsh"
+    )
+}
+
 #[tauri::command]
 fn open_devtools(window: tauri::WebviewWindow) {
     #[cfg(debug_assertions)]
@@ -200,59 +243,72 @@ fn scan_directory(
     for entry in walker.filter_map(|e| e.ok()) {
         let entry_path = entry.path();
         if entry_path.is_file() {
-            if let Some(ext) = entry_path.extension().and_then(|e| e.to_str()) {
-                let ext_lower = ext.to_lowercase();
-                if is_supported_editable_extension(&ext_lower) {
-                    let name = entry_path
-                        .file_name()
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string();
-                    let relative_path = entry_path
-                        .strip_prefix(root)
-                        .unwrap_or(entry_path)
-                        .to_string_lossy()
-                        .to_string();
+            let file_name_str = entry_path.file_name().unwrap_or_default().to_string_lossy();
+            let ext_lower = entry_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+            
+            let mut is_supported = false;
+            let mut detected_ext = String::new();
 
-                    let modified_at = match entry.metadata() {
-                        Ok(m) => match m.modified() {
-                            Ok(sys_time) => {
-                                let dt: DateTime<Utc> = sys_time.into();
-                                dt.to_rfc3339()
-                            }
-                            Err(_) => Utc::now().to_rfc3339(),
-                        },
-                        Err(_) => Utc::now().to_rfc3339(),
-                    };
+            if !ext_lower.is_empty() && is_supported_editable_extension(&ext_lower) {
+                is_supported = true;
+                detected_ext = format!(".{}", ext_lower);
+            } else if !ext_lower.is_empty() && is_shell_extension(&ext_lower) {
+                is_supported = true;
+                detected_ext = format!(".{}", ext_lower);
+            } else if is_shell_config_file(&file_name_str) {
+                is_supported = true;
+                detected_ext = file_name_str.to_string();
+            } else if ext_lower.is_empty() && is_shell_script_by_shebang(entry_path) {
+                is_supported = true;
+                detected_ext = "__shebang_shell".to_string();
+            }
 
-                    let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            if is_supported {
+                let name = file_name_str.to_string();
+                let relative_path = entry_path
+                    .strip_prefix(root)
+                    .unwrap_or(entry_path)
+                    .to_string_lossy()
+                    .to_string();
 
-                    // Quick scan for TODOs without keeping content in memory
-                    let mut has_todos = false;
-                    if size > 0 && size < 2 * 1024 * 1024 {
-                        if let Ok(content) = fs::read_to_string(entry_path) {
-                            has_todos = content.contains("TODO")
-                                || content.contains("- [ ]")
-                                || content.contains("- [x]")
-                                || content.contains("- [X]");
+                let modified_at = match entry.metadata() {
+                    Ok(m) => match m.modified() {
+                        Ok(sys_time) => {
+                            let dt: DateTime<Utc> = sys_time.into();
+                            dt.to_rfc3339()
                         }
-                    }
+                        Err(_) => Utc::now().to_rfc3339(),
+                    },
+                    Err(_) => Utc::now().to_rfc3339(),
+                };
 
-                    files.push(ScannedFile {
-                        id: format!("{}-{}", workspace_id, relative_path.replace("\\", "/")),
-                        workspace_id: workspace_id.clone(),
-                        name,
-                        extension: format!(".{}", ext_lower),
-                        workspace: workspace_name.clone(),
-                        absolute_path: entry_path.to_string_lossy().to_string(),
-                        relative_path: relative_path.replace("\\", "/"),
-                        modified_at,
-                        size,
-                        is_favorite: false,
-                        is_pinned: false,
-                        has_todos,
-                    });
+                let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+
+                // Quick scan for TODOs without keeping content in memory
+                let mut has_todos = false;
+                if size > 0 && size < 2 * 1024 * 1024 {
+                    if let Ok(content) = fs::read_to_string(entry_path) {
+                        has_todos = content.contains("TODO")
+                            || content.contains("- [ ]")
+                            || content.contains("- [x]")
+                            || content.contains("- [X]");
+                    }
                 }
+
+                files.push(ScannedFile {
+                    id: format!("{}-{}", workspace_id, relative_path.replace("\\", "/")),
+                    workspace_id: workspace_id.clone(),
+                    name,
+                    extension: detected_ext,
+                    workspace: workspace_name.clone(),
+                    absolute_path: entry_path.to_string_lossy().to_string(),
+                    relative_path: relative_path.replace("\\", "/"),
+                    modified_at,
+                    size,
+                    is_favorite: false,
+                    is_pinned: false,
+                    has_todos,
+                });
             }
         }
     }
@@ -276,12 +332,30 @@ fn create_file(
 ) -> Result<ScannedFile, String> {
     let file_path = resolve_safe_path(&workspace_path, &file_name)?;
 
-    // Check if the extension is valid
-    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("");
-    let ext_lower = ext.to_lowercase();
-    if !is_supported_editable_extension(&ext_lower) {
+    let ext_lower = file_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+    let file_name_str = file_path.file_name().unwrap_or_default().to_string_lossy();
+    
+    let mut is_supported = false;
+    let mut detected_ext = String::new();
+
+    if !ext_lower.is_empty() && is_supported_editable_extension(&ext_lower) {
+        is_supported = true;
+        detected_ext = format!(".{}", ext_lower);
+    } else if !ext_lower.is_empty() && is_shell_extension(&ext_lower) {
+        is_supported = true;
+        detected_ext = format!(".{}", ext_lower);
+    } else if is_shell_config_file(&file_name_str) {
+        is_supported = true;
+        detected_ext = file_name_str.to_string();
+    } else if ext_lower.is_empty() {
+        // Assume extensionless shebang file if no extension, creating it empty is fine
+        is_supported = true;
+        detected_ext = "__shebang_shell".to_string();
+    }
+
+    if !is_supported {
         return Err(
-            "Only .md, .markdown, .mdx, .txt, .json, .yml, and .yaml files are supported"
+            "Only supported text, markdown, json, yaml, and shell files can be created"
                 .to_string(),
         );
     }
@@ -317,7 +391,7 @@ fn create_file(
         id: format!("{}-file-{}", workspace_id, Utc::now().timestamp_millis()),
         workspace_id,
         name: file_name.clone(),
-        extension: format!(".{}", ext_lower),
+        extension: detected_ext,
         workspace: workspace_name,
         absolute_path: file_path.to_string_lossy().to_string(),
         relative_path: file_name,

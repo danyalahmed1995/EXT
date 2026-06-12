@@ -21,10 +21,13 @@ describe('file type detection', () => {
     expect(getFileType('unknown.bin')).toBe('unsupported');
   });
 
-  it('marks JSON and YAML as editable plain text documents', () => {
+  it('marks JSON, YAML, and Shell as editable plain text documents', () => {
     expect(isEditableTextFile('package.json')).toBe(true);
     expect(isEditableTextFile('config.yml')).toBe(true);
     expect(isEditableTextFile('config.yaml')).toBe(true);
+    expect(isEditableTextFile('script.sh')).toBe(true);
+    expect(isEditableTextFile('.bashrc')).toBe(true);
+    expect(isEditableTextFile('__shebang_shell')).toBe(true);
   });
 
   it('keeps preview and outline Markdown-only', () => {
@@ -33,9 +36,11 @@ describe('file type detection', () => {
     expect(isPreviewableMarkdownFile('package.json')).toBe(false);
     expect(isPreviewableMarkdownFile('config.yml')).toBe(false);
     expect(isPreviewableMarkdownFile('config.yaml')).toBe(false);
+    expect(isPreviewableMarkdownFile('script.sh')).toBe(false);
     expect(supportsOutline('package.json')).toBe(false);
     expect(supportsOutline('config.yml')).toBe(false);
     expect(supportsOutline('config.yaml')).toBe(false);
+    expect(supportsOutline('.bashrc')).toBe(false);
   });
 
   it('maps supported extensions to editor languages', () => {
@@ -45,12 +50,20 @@ describe('file type detection', () => {
     expect(getEditorLanguage('config.yaml')).toBe('yaml');
     expect(getEditorLanguage('CONFIG.YML')).toBe('yaml');
     expect(getEditorLanguage('unknown.txt')).toBe('text');
+    expect(getEditorLanguage('deploy.sh')).toBe('shell');
+    expect(getEditorLanguage('.bashrc')).toBe('shell');
+    expect(getEditorLanguage('.zshrc')).toBe('shell');
+    expect(getEditorLanguage('__shebang_shell')).toBe('shell');
   });
 
   it('keeps unknown extensions unsupported and non-markdown', () => {
     expect(getFileType('unknown.bin')).toBe('unsupported');
     expect(isEditableTextFile('unknown.bin')).toBe(false);
     expect(isMarkdownFile('unknown.bin')).toBe(false);
+    
+    // Extensionless files that are NOT configs or shebang should be unsupported
+    expect(getFileType('random-file-no-ext')).toBe('unsupported');
+    expect(isEditableTextFile('random-file-no-ext')).toBe(false);
   });
 
   it('recognises .mdx as a markdown file', () => {
@@ -67,5 +80,13 @@ describe('file type detection', () => {
     expect(getFileType('Hero.Mdx')).toBe('markdown');
     expect(isMarkdownFile('DOCS.MDX')).toBe(true);
     expect(getEditorLanguage('guide.MDX')).toBe('markdown');
+  });
+  
+  it('detects shell config files and shebang files specifically', () => {
+    expect(getFileType('.bash_profile')).toBe('shell');
+    expect(getFileType('.profile')).toBe('shell');
+    expect(getFileType('.zshrc')).toBe('shell');
+    expect(getFileType('.ZSHRC')).toBe('shell'); // Case insensitive check
+    expect(getFileType('__shebang_shell')).toBe('shell');
   });
 });

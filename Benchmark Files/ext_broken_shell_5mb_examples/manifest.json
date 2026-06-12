@@ -1,0 +1,45 @@
+{
+  "total_uncompressed_bytes": 6201211,
+  "files": [
+    {
+      "path": ".profile",
+      "bytes": 700000,
+      "sha256": "e230389db5a8a1a2d1b43e8cc3a4a30044e33f5382eb32883fe19421cee21d49"
+    },
+    {
+      "path": "01-unclosed-quotes.sh",
+      "bytes": 1050227,
+      "sha256": "0e1e50c67707214e27d0d638250132e83e842900d49145a20460df13acab9597"
+    },
+    {
+      "path": "02-bad-bash.bash",
+      "bytes": 1000066,
+      "sha256": "0844bf4de4c4310a07dba930c5a05f72579cea6abad3e79b840805d7df4bd84f"
+    },
+    {
+      "path": "03-broken-zsh.zsh",
+      "bytes": 900121,
+      "sha256": "5dd4deb9c506ae810fb61ad6750c4b2856e37fd6f099ab0fe488ff7ef8996ebf"
+    },
+    {
+      "path": "04-broken-fish.fish",
+      "bytes": 850044,
+      "sha256": "324a3decb5196d894845a034321c34c61a372c050f4345d2420d74b20473833a"
+    },
+    {
+      "path": "05-broken-config.profile",
+      "bytes": 800206,
+      "sha256": "a140e5a7c677d88c1c9e1d7a05a69eea3b91cce2b6c1c1ceee701800a34a1ef2"
+    },
+    {
+      "path": "06-broken-extensionless-shebang",
+      "bytes": 900124,
+      "sha256": "acc7183737201574d50a714f47e585eb29409f363b18966b5f9f5c1f102e8d12"
+    },
+    {
+      "path": "README.md",
+      "bytes": 423,
+      "sha256": "2a10cfa7bc775f08aa0fb6504e7282be0bba69e2939264606cf6726e1a863128"
+    }
+  ]
+}

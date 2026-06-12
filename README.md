@@ -5,7 +5,7 @@
 <h1 align="center">EXT</h1>
 
 <p align="center">
-  <strong>A local-first workspace for Markdown, MDX, JSON, YAML, and plain text files.</strong>
+  <strong>A local-first workspace for Markdown, MDX, JSON, YAML, Shell Scripts, and plain text files.</strong>
 </p>
 
 <p align="center">
@@ -39,9 +39,9 @@
 
 ---
 
-EXT is for people with Markdown, MDX, JSON, YAML, and text files scattered across projects, notes, docs, repos, and half-finished idea caves.
+EXT is for people with Markdown, MDX, JSON, YAML, Shell Scripts, and text files scattered across projects, notes, docs, repos, and half-finished idea caves.
 
-It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, and `.txt` files, and gives you one place to read, search, edit, preview, and organize them.
+It does not import your notes into a proprietary database. It opens folders that already exist on your computer, scans for `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, `.txt`, and `.sh` (along with other shell extensions and configs), and gives you one place to read, search, edit, preview, and organize them.
 
 You can keep using Git, OneDrive, Dropbox, Syncthing, Obsidian, VS Code, Notepad, Sublime Text, or any other tool alongside EXT. The files remain normal files on disk.
 
@@ -51,7 +51,7 @@ Most Markdown tools either want to become your whole world or stay too tiny to m
 
 | You want | EXT gives you |
 | --- | --- |
-| Local folders, not a hosted vault | Workspace scanning over real Markdown, MDX, JSON, YAML, and text files |
+| Local folders, not a hosted vault | Workspace scanning over real Markdown, MDX, JSON, YAML, Shell Scripts, and text files |
 | Fast access across many folders | Smart views, filename search, tabs, and recent files |
 | A proper editor without ceremony | CodeMirror 6, autosave, status bar, find/replace, line ending controls |
 | Markdown preview that can survive large files | Demand-driven rendering, chunked preview work, large-doc protection |
@@ -71,11 +71,11 @@ Demo media lives in the repository for README and development use. Production bu
 
 ## What EXT is
 
-EXT is a local-first desktop workspace for Markdown, MDX, JSON, YAML, and plain text files.
+EXT is a local-first desktop workspace for Markdown, MDX, JSON, YAML, Shell Scripts, and plain text files.
 
 It gives you:
 
-- one place to browse local Markdown, MDX, JSON, YAML, and text files
+- one place to browse local Markdown, MDX, JSON, YAML, Shell Scripts, and text files
 - fast filename search across connected workspaces
 - smart views for common file groups
 - a clean editor with live Markdown preview
@@ -99,14 +99,14 @@ There are no accounts, hosted documents, proprietary sync layers, or hidden note
 
 - Add existing folders as workspaces.
 - EXT scans local folders directly.
-- Supported editable files are shown in the workspace file list: `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, and `.txt`.
+- Supported editable files are shown in the workspace file list: `.md`, `.markdown`, `.mdx`, `.json`, `.yml`, `.yaml`, `.txt`, shell scripts (`.sh`, `.bash`, `.zsh`, etc.), and common shell configs (`.bashrc`, `.profile`, etc.). Extensionless scripts are also detected safely via shebang.
 - Common noisy directories such as `.git`, `node_modules`, build output, benchmark output, and cache folders are ignored.
 - Files can still be opened and edited by other applications.
 - Removing a workspace from EXT does not delete the folder from disk.
 
 ### File management
 
-- Create Markdown, MDX, JSON, YAML, and text files.
+- Create Markdown, MDX, JSON, YAML, Shell Scripts, and text files.
 - Create folders.
 - Rename files.
 - Delete files with confirmation.
@@ -141,18 +141,18 @@ The sidebar includes quick views for common workflows:
 ### Editor and preview
 
 - CodeMirror 6 editor.
-- Syntax highlighting for Markdown, MDX, JSON, YAML, and plain text.
+- Syntax highlighting for Markdown, MDX, JSON, YAML, Shell, and plain text.
 - Autosave to local disk.
 - Saved/unsaved state indicator.
 - Editor Only, Split View, and Preview Only modes.
 - GitHub-Flavored Markdown preview.
 - LaTeX and math-heavy Markdown preview support.
 - Markdown outline for heading navigation.
-- JSON and YAML edit as source files without preview, outline, schema validation, linting, or formatting.
+- JSON, YAML, and Shell Scripts edit as source files without preview, outline, schema validation, linting, or formatting.
 - Local image rendering in preview for valid Markdown image paths.
 - Status bar metadata for file type, encoding, line endings, size, and save state.
 - Demand-driven preview rendering for large Markdown files.
-- Viewport-bounded syntax highlighting for large JSON and YAML files.
+- Viewport-bounded syntax highlighting for large JSON, YAML, and Shell files.
 
 Image files are rendered when referenced from Markdown, but they are not added to the workspace file list and EXT does not manage image assets.
 
