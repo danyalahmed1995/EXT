@@ -22,6 +22,17 @@ export interface FileItem {
 
 export type SortMode = 'date-desc' | 'date-asc' | 'name-asc' | 'name-desc' | 'custom';
 
+export type LargeFileThresholdPreset = '20mb' | '50mb' | '100mb' | '250mb' | '500mb' | 'custom';
+
+export interface LargeFileSettings {
+  autoEnable: boolean;
+  thresholdPreset: LargeFileThresholdPreset;
+  customThresholdMb: number;
+  askBeforeOpening: boolean;
+  showDetailsPanel: boolean;
+  allowNormalEditor: boolean;
+}
+
 export interface AppearanceSettings {
   animations: boolean;
   premiumEffects: boolean;
@@ -33,4 +44,5 @@ export interface AppearanceSettings {
   ignoredDirs: string[];
   enableProfiler?: boolean;
   previewCentered?: boolean;
+  largeFileMode: LargeFileSettings;
 }

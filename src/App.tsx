@@ -8,6 +8,7 @@ import { RenameModal } from './components/modals/RenameModal';
 import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu } from './components/context-menu/ContextMenu';
 import { DndContext, pointerWithin } from '@dnd-kit/core';
+import { normalizeLargeFileSettings } from './utils/largeFile';
 
 
 import { useAppLogic } from './hooks/useAppLogic';
@@ -63,6 +64,7 @@ function App() {
   handleRenameFile,
   handleRenameWorkspace,
   handleSaveFile,
+  handleLargeFileStateChange,
   handleDeleteFile,
   handleCopyFile,
   handleFileListContextMenu,
@@ -76,8 +78,9 @@ function App() {
 
   // Memoize active file content/extension for Sidebar to prevent re-renders
   const activeTabMemo = useMemo(() => openTabs.find(t => t.id === activeFileId), [openTabs, activeFileId]);
-  const activeFileContent = activeTabMemo?.content;
+  const activeFileContent = activeTabMemo?.isLargeFile ? undefined : activeTabMemo?.content;
   const activeFileExtension = activeTabMemo?.extension;
+  const largeFileSettings = normalizeLargeFileSettings(appearance.largeFileMode);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -248,11 +251,13 @@ function App() {
             onTabSelect={setActiveFileId}
             onTabClose={handleTabClose}
             onContentChange={handleContentChange}
+            onLargeFileStateChange={handleLargeFileStateChange}
             onConvertLineEnding={handleConvertLineEnding}
             onSaveFile={handleSaveFile}
             onNewFile={() => setShowNewFileModal(true)}
             onOpenSettings={() => setShowSettingsModal(true)}
             previewKey={previewKey}
+            showLargeFileDetails={largeFileSettings.showDetailsPanel}
           />
         }
       />

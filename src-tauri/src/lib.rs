@@ -1,6 +1,8 @@
 use chrono::{DateTime, Utc};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::fs;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use tauri::{
     menu::{Menu, MenuItem},
@@ -8,6 +10,12 @@ use tauri::{
     Emitter, Manager,
 };
 use walkdir::WalkDir;
+
+const LARGE_FILE_MODE_THRESHOLD_BYTES: u64 = 100 * 1024 * 1024;
+const NORMAL_EDITOR_HARD_LIMIT_BYTES: u64 = 100 * 1024 * 1024;
+const DEFAULT_CHUNK_BYTES: u64 = 1024 * 1024;
+const MAX_CHUNK_BYTES: u64 = 8 * 1024 * 1024;
+const SAVE_PROGRESS_EMIT_BYTES: u64 = 16 * 1024 * 1024;
 
 fn resolve_safe_path(workspace_path: &str, relative_path: &str) -> Result<PathBuf, String> {
     let root = Path::new(workspace_path);
@@ -62,6 +70,87 @@ pub struct ScannedFile {
     pub is_favorite: bool,
     pub is_pinned: bool,
     pub has_todos: bool,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileMetadata {
+    pub name: String,
+    pub extension: String,
+    pub absolute_path: String,
+    pub relative_path: String,
+    pub modified_at: String,
+    pub size: u64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileChunk {
+    pub text: String,
+    pub offset: u64,
+    pub end_offset: u64,
+    pub bytes_read: u64,
+    pub next_offset: u64,
+    pub is_eof: bool,
+    pub newline_count: usize,
+    pub begins_mid_line: bool,
+    pub ends_mid_line: bool,
+    pub newline_style: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchMatch {
+    pub line: u64,
+    pub byte_offset: u64,
+    pub preview: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchChunkResult {
+    pub matches: Vec<SearchMatch>,
+    pub scanned_bytes: u64,
+    pub lines_scanned: u64,
+    pub next_offset: u64,
+    pub is_eof: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LargeFilePatch {
+    pub start: u64,
+    pub end: u64,
+    pub text: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LargeFileSaveResult {
+    pub modified_at: String,
+    pub size: u64,
+    pub patch_count: usize,
+    pub backup_path: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LargeFileSaveProgress {
+    pub request_id: String,
+    pub written_bytes: u64,
+    pub total_bytes: u64,
+    pub phase: String,
+}
+
+fn detect_newline_style(text: &str) -> String {
+    let crlf = text.matches("\r\n").count();
+    let lf = text.bytes().filter(|b| *b == b'\n').count().saturating_sub(crlf);
+    match (crlf > 0, lf > 0) {
+        (true, true) => "Mixed".to_string(),
+        (true, false) => "CRLF".to_string(),
+        (false, true) => "LF".to_string(),
+        (false, false) => "Unknown".to_string(),
+    }
 }
 
 #[tauri::command]
@@ -378,14 +467,420 @@ fn delete_file(workspace_path: String, relative_path: String) -> Result<(), Stri
 }
 
 #[tauri::command]
-fn read_file(workspace_path: String, relative_path: String) -> Result<String, String> {
+fn get_file_metadata(workspace_path: String, relative_path: String) -> Result<FileMetadata, String> {
     let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
 
     if !file_path.exists() {
         return Err("File does not exist".to_string());
     }
 
-    fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))
+    let metadata = fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
+    let modified_at = match metadata.modified() {
+        Ok(sys_time) => {
+            let dt: DateTime<Utc> = sys_time.into();
+            dt.to_rfc3339()
+        }
+        Err(_) => Utc::now().to_rfc3339(),
+    };
+
+    Ok(FileMetadata {
+        name: file_path
+            .file_name()
+            .unwrap_or_default()
+            .to_string_lossy()
+            .to_string(),
+        extension: file_path
+            .extension()
+            .and_then(|e| e.to_str())
+            .map(|ext| format!(".{}", ext.to_lowercase()))
+            .unwrap_or_default(),
+        absolute_path: file_path.to_string_lossy().to_string(),
+        relative_path,
+        modified_at,
+        size: metadata.len(),
+    })
+}
+
+#[tauri::command]
+fn read_file(
+    workspace_path: String,
+    relative_path: String,
+    allow_large_file_read: Option<bool>,
+) -> Result<String, String> {
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
+
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let metadata = fs::metadata(&file_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
+    println!(
+        "[LargeFile] read_file metadata path={} size={} bytes",
+        file_path.to_string_lossy(),
+        metadata.len()
+    );
+
+    if metadata.len() > LARGE_FILE_MODE_THRESHOLD_BYTES && !allow_large_file_read.unwrap_or(false) {
+        return Err(format!(
+            "File is {} bytes and must be opened with the streaming text editor",
+            metadata.len()
+        ));
+    }
+    if metadata.len() > NORMAL_EDITOR_HARD_LIMIT_BYTES {
+        return Err(format!(
+            "File is {} bytes and exceeds the normal editor hard limit",
+            metadata.len()
+        ));
+    }
+
+    let started_at = std::time::Instant::now();
+    println!(
+        "[LargeFile] read_file start path={} size={}",
+        file_path.to_string_lossy(),
+        metadata.len()
+    );
+    let content = fs::read_to_string(&file_path).map_err(|e| format!("Failed to read file: {}", e))?;
+    println!(
+        "[LargeFile] read_file end path={} bytes={} elapsed_ms={}",
+        file_path.to_string_lossy(),
+        content.len(),
+        started_at.elapsed().as_millis()
+    );
+    Ok(content)
+}
+
+#[tauri::command]
+fn read_file_chunk(
+    workspace_path: String,
+    relative_path: String,
+    offset: u64,
+    max_bytes: Option<u64>,
+) -> Result<FileChunk, String> {
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
+
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let file_size = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to read metadata: {}", e))?
+        .len();
+    let read_size = max_bytes
+        .unwrap_or(DEFAULT_CHUNK_BYTES)
+        .clamp(1, MAX_CHUNK_BYTES);
+    let safe_offset = offset.min(file_size);
+    let mut file = File::open(&file_path).map_err(|e| format!("Failed to open file: {}", e))?;
+
+    let begins_mid_line = if safe_offset == 0 {
+        false
+    } else {
+        let mut probe = [0_u8; 1];
+        file.seek(SeekFrom::Start(safe_offset - 1))
+            .map_err(|e| format!("Failed to seek file: {}", e))?;
+        file.read_exact(&mut probe)
+            .map_err(|e| format!("Failed to probe chunk start: {}", e))?;
+        probe[0] != b'\n'
+    };
+
+    file.seek(SeekFrom::Start(safe_offset))
+        .map_err(|e| format!("Failed to seek file: {}", e))?;
+
+    let mut buffer = vec![0_u8; read_size as usize];
+    let bytes_read = file
+        .read(&mut buffer)
+        .map_err(|e| format!("Failed to read chunk: {}", e))?;
+    buffer.truncate(bytes_read);
+    let text = String::from_utf8_lossy(&buffer).to_string();
+    let newline_count = text.bytes().filter(|b| *b == b'\n').count();
+    let next_offset = safe_offset + bytes_read as u64;
+    let ends_mid_line = if next_offset >= file_size || bytes_read == 0 {
+        false
+    } else {
+        let mut probe = [0_u8; 1];
+        file.seek(SeekFrom::Start(next_offset))
+            .map_err(|e| format!("Failed to seek file: {}", e))?;
+        file.read_exact(&mut probe)
+            .map_err(|e| format!("Failed to probe chunk end: {}", e))?;
+        probe[0] != b'\n'
+    };
+
+    Ok(FileChunk {
+        text,
+        offset: safe_offset,
+        end_offset: next_offset,
+        bytes_read: bytes_read as u64,
+        next_offset,
+        is_eof: next_offset >= file_size,
+        newline_count,
+        begins_mid_line,
+        ends_mid_line,
+        newline_style: detect_newline_style(&String::from_utf8_lossy(&buffer)),
+    })
+}
+
+#[tauri::command]
+fn search_file_chunk(
+    workspace_path: String,
+    relative_path: String,
+    query: String,
+    offset: u64,
+    line_offset: u64,
+    max_bytes: Option<u64>,
+    max_results: Option<usize>,
+) -> Result<SearchChunkResult, String> {
+    if query.is_empty() {
+        return Ok(SearchChunkResult {
+            matches: Vec::new(),
+            scanned_bytes: 0,
+            lines_scanned: 0,
+            next_offset: offset,
+            is_eof: true,
+        });
+    }
+
+    let chunk = read_file_chunk(workspace_path, relative_path, offset, max_bytes)?;
+    let query_lower = query.to_lowercase();
+    let max_results = max_results.unwrap_or(100).clamp(1, 500);
+    let mut matches = Vec::new();
+    let mut line_number = line_offset;
+    let mut byte_cursor = chunk.offset;
+
+    for segment in chunk.text.split_inclusive('\n') {
+        line_number += 1;
+        let line = segment.trim_end_matches(&['\r', '\n'][..]);
+        if matches.len() < max_results && line.to_lowercase().contains(&query_lower) {
+            let preview: String = line.chars().take(240).collect();
+            matches.push(SearchMatch {
+                line: line_number,
+                byte_offset: byte_cursor,
+                preview,
+            });
+        }
+        byte_cursor += segment.len() as u64;
+    }
+
+    Ok(SearchChunkResult {
+        matches,
+        scanned_bytes: chunk.bytes_read,
+        lines_scanned: line_number.saturating_sub(line_offset),
+        next_offset: chunk.next_offset,
+        is_eof: chunk.is_eof,
+    })
+}
+
+fn stream_copy_range(
+    source: &mut File,
+    target: &mut File,
+    from: u64,
+    to: u64,
+    progress: &mut impl FnMut(u64) -> Result<(), String>,
+) -> Result<(), String> {
+    if to <= from {
+        return Ok(());
+    }
+
+    source
+        .seek(SeekFrom::Start(from))
+        .map_err(|e| format!("Failed to seek source: {}", e))?;
+    let mut remaining = to - from;
+    let mut buffer = vec![0_u8; DEFAULT_CHUNK_BYTES as usize];
+
+    while remaining > 0 {
+        let read_len = remaining.min(buffer.len() as u64) as usize;
+        let n = source
+            .read(&mut buffer[..read_len])
+            .map_err(|e| format!("Failed to stream source: {}", e))?;
+        if n == 0 {
+            return Err("Unexpected EOF while streaming save".to_string());
+        }
+        target
+            .write_all(&buffer[..n])
+            .map_err(|e| format!("Failed to write temp file: {}", e))?;
+        progress(n as u64)?;
+        remaining -= n as u64;
+    }
+
+    Ok(())
+}
+
+fn emit_large_file_save_progress(
+    app: &tauri::AppHandle,
+    request_id: &Option<String>,
+    written_bytes: u64,
+    total_bytes: u64,
+    phase: &str,
+) {
+    if let Some(id) = request_id {
+        let _ = app.emit(
+            "large-file-save-progress",
+            LargeFileSaveProgress {
+                request_id: id.clone(),
+                written_bytes,
+                total_bytes,
+                phase: phase.to_string(),
+            },
+        );
+    }
+}
+
+#[tauri::command]
+fn save_large_file_patches(
+    app: tauri::AppHandle,
+    workspace_path: String,
+    relative_path: String,
+    patches: Vec<LargeFilePatch>,
+    request_id: Option<String>,
+) -> Result<LargeFileSaveResult, String> {
+    let started_at = std::time::Instant::now();
+    let file_path = resolve_safe_path(&workspace_path, &relative_path)?;
+
+    if !file_path.exists() {
+        return Err("File does not exist".to_string());
+    }
+
+    let file_size = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to read metadata: {}", e))?
+        .len();
+    let mut sorted_patches = patches;
+    sorted_patches.sort_by_key(|patch| patch.start);
+
+    let mut previous_end = 0;
+    for patch in &sorted_patches {
+        if patch.start > patch.end {
+            return Err("Invalid patch range".to_string());
+        }
+        if patch.end > file_size {
+            return Err("Patch extends beyond file size".to_string());
+        }
+        if patch.start < previous_end {
+            return Err("Overlapping large-file patches cannot be saved".to_string());
+        }
+        previous_end = patch.end;
+    }
+
+    if sorted_patches.is_empty() {
+        let modified_at = match fs::metadata(&file_path).and_then(|m| m.modified()) {
+            Ok(sys_time) => {
+                let dt: DateTime<Utc> = sys_time.into();
+                dt.to_rfc3339()
+            }
+            Err(_) => Utc::now().to_rfc3339(),
+        };
+        return Ok(LargeFileSaveResult {
+            modified_at,
+            size: file_size,
+            patch_count: 0,
+            backup_path: None,
+        });
+    }
+
+    let parent = file_path
+        .parent()
+        .ok_or_else(|| "Cannot resolve parent folder".to_string())?;
+    let file_name = file_path
+        .file_name()
+        .unwrap_or_default()
+        .to_string_lossy()
+        .to_string();
+    let stamp = Utc::now().timestamp_millis();
+    let temp_path = parent.join(format!(".{}.ext-save-{}.tmp", file_name, stamp));
+    let backup_path = parent.join(format!(".{}.ext-backup-{}", file_name, stamp));
+
+    println!(
+        "[LargeFile] save start path={} size={} patches={}",
+        file_path.to_string_lossy(),
+        file_size,
+        sorted_patches.len()
+    );
+
+    let mut source = File::open(&file_path).map_err(|e| format!("Failed to open source: {}", e))?;
+    let mut target = File::create(&temp_path).map_err(|e| format!("Failed to create temp file: {}", e))?;
+    let replaced_bytes = sorted_patches
+        .iter()
+        .map(|patch| patch.end.saturating_sub(patch.start))
+        .sum::<u64>();
+    let inserted_bytes = sorted_patches
+        .iter()
+        .map(|patch| patch.text.as_bytes().len() as u64)
+        .sum::<u64>();
+    let total_output_bytes = file_size
+        .saturating_sub(replaced_bytes)
+        .saturating_add(inserted_bytes);
+    let mut written_bytes = 0_u64;
+    let mut last_progress_emit = 0_u64;
+    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Preparing");
+
+    let mut report_progress = |bytes: u64| -> Result<(), String> {
+        written_bytes = written_bytes.saturating_add(bytes);
+        if written_bytes.saturating_sub(last_progress_emit) >= SAVE_PROGRESS_EMIT_BYTES
+            || written_bytes >= total_output_bytes
+        {
+            last_progress_emit = written_bytes;
+            emit_large_file_save_progress(
+                &app,
+                &request_id,
+                written_bytes.min(total_output_bytes),
+                total_output_bytes,
+                "Writing",
+            );
+        }
+        Ok(())
+    };
+
+    let mut cursor = 0;
+    for patch in &sorted_patches {
+        stream_copy_range(&mut source, &mut target, cursor, patch.start, &mut report_progress)?;
+        target
+            .write_all(patch.text.as_bytes())
+            .map_err(|e| format!("Failed to write patch: {}", e))?;
+        report_progress(patch.text.as_bytes().len() as u64)?;
+        cursor = patch.end;
+    }
+    stream_copy_range(&mut source, &mut target, cursor, file_size, &mut report_progress)?;
+    target
+        .flush()
+        .map_err(|e| format!("Failed to flush temp file: {}", e))?;
+    target
+        .sync_all()
+        .map_err(|e| format!("Failed to sync temp file: {}", e))?;
+    drop(target);
+    drop(source);
+
+    fs::rename(&file_path, &backup_path)
+        .map_err(|e| format!("Failed to create backup before replace: {}", e))?;
+    emit_large_file_save_progress(&app, &request_id, written_bytes, total_output_bytes, "Replacing");
+
+    if let Err(e) = fs::rename(&temp_path, &file_path) {
+        let _ = fs::rename(&backup_path, &file_path);
+        return Err(format!("Failed to replace original file; backup restored: {}", e));
+    }
+    emit_large_file_save_progress(&app, &request_id, total_output_bytes, total_output_bytes, "Complete");
+
+    let new_size = fs::metadata(&file_path)
+        .map_err(|e| format!("Failed to read saved metadata: {}", e))?
+        .len();
+    let modified_at = match fs::metadata(&file_path).and_then(|m| m.modified()) {
+        Ok(sys_time) => {
+            let dt: DateTime<Utc> = sys_time.into();
+            dt.to_rfc3339()
+        }
+        Err(_) => Utc::now().to_rfc3339(),
+    };
+
+    println!(
+        "[LargeFile] save end path={} new_size={} elapsed_ms={} backup={}",
+        file_path.to_string_lossy(),
+        new_size,
+        started_at.elapsed().as_millis(),
+        backup_path.to_string_lossy()
+    );
+
+    Ok(LargeFileSaveResult {
+        modified_at,
+        size: new_size,
+        patch_count: sorted_patches.len(),
+        backup_path: Some(backup_path.to_string_lossy().to_string()),
+    })
 }
 
 #[tauri::command]
@@ -670,6 +1165,10 @@ pub fn run() {
             delete_file,
             reveal_in_explorer,
             read_file,
+            read_file_chunk,
+            search_file_chunk,
+            save_large_file_patches,
+            get_file_metadata,
             copy_file_to_clipboard,
             get_file_modified_time,
             get_absolute_path,

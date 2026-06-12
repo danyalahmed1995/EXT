@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import "./SettingsModal.css";
 import { EXTIcon, GitHubIcon } from '../../icons/icons';
-import { AppearanceSettings } from '../../types';
+import { AppearanceSettings, LargeFileSettings, LargeFileThresholdPreset } from '../../types';
 import { openUrl } from '@tauri-apps/plugin-opener';
+import { SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS, normalizeLargeFileSettings } from '../../utils/largeFile';
 
 interface SettingsModalProps {
 	appearance: AppearanceSettings;
@@ -18,13 +19,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 	onRemoveAllWorkspaces,
 }) => {
 	const [newDir, setNewDir] = useState("");
+	const [isThresholdMenuOpen, setIsThresholdMenuOpen] = useState(false);
+	const thresholdDropdownRef = useRef<HTMLDivElement | null>(null);
+	const largeFileMode = normalizeLargeFileSettings(appearance.largeFileMode);
+
+	useEffect(() => {
+		if (!isThresholdMenuOpen) return;
+
+		const handlePointerDown = (event: PointerEvent) => {
+			if (!thresholdDropdownRef.current?.contains(event.target as Node)) {
+				setIsThresholdMenuOpen(false);
+			}
+		};
+
+		window.addEventListener("pointerdown", handlePointerDown);
+		return () => window.removeEventListener("pointerdown", handlePointerDown);
+	}, [isThresholdMenuOpen]);
 
 	const handleToggle = (
-		key: Exclude<keyof AppearanceSettings, "ignoredDirs">,
+		key: Exclude<keyof AppearanceSettings, "ignoredDirs" | "largeFileMode">,
 	) => {
 		onUpdateAppearance({
 			...appearance,
 			[key]: !appearance[key],
+		});
+	};
+
+	const updateLargeFileMode = (settings: Partial<LargeFileSettings>) => {
+		onUpdateAppearance({
+			...appearance,
+			largeFileMode: normalizeLargeFileSettings({
+				...largeFileMode,
+				...settings,
+			}),
 		});
 	};
 
@@ -60,6 +87,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 			console.error("Failed to open link:", err);
 		}
 	};
+
+	const selectedThresholdLabel = SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS.find(
+		(option) => option.value === largeFileMode.thresholdPreset,
+	)?.label ?? "100 MB";
 
 	return (
 		<div className="modal-overlay" onClick={onClose}>
@@ -182,14 +213,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 								</span>
 							</label>
 
-							<label
-								className="settings-toggle"
-								style={{
-									marginTop: "1rem",
-									paddingTop: "1rem",
-									borderTop: "1px solid var(--color-border-subtle)",
-								}}
-							>
+							<label className="settings-toggle settings-toggle-divider">
 								<input
 									type="checkbox"
 									checked={!!appearance.enableProfiler}
@@ -199,6 +223,71 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 									Enable Navigation Profiler (Debug)
 								</span>
 							</label>
+						</div>
+					</section>
+
+					<section className="settings-section">
+						<h3>Large Files</h3>
+						<p className="settings-desc">
+							Open very large files in safe mode without loading the full document.
+						</p>
+
+						<div className="settings-toggles large-file-settings">
+							<label className="settings-toggle">
+								<input
+									type="checkbox"
+									checked={largeFileMode.autoEnable}
+									onChange={() => updateLargeFileMode({ autoEnable: !largeFileMode.autoEnable })}
+								/>
+								<span className="toggle-copy">
+									<span className="toggle-label">Open very large files in safe mode</span>
+									<span className="toggle-desc">Prevents huge files from entering the normal editor, preview, outline, and math renderer.</span>
+								</span>
+							</label>
+
+							<div className="settings-field-row">
+								<label htmlFor="large-file-threshold">Large file threshold</label>
+								<div className="settings-field-controls">
+									<div
+										className="settings-select"
+										ref={thresholdDropdownRef}
+									>
+										<button
+											id="large-file-threshold"
+											type="button"
+											className={`settings-select-trigger ${isThresholdMenuOpen ? "open" : ""}`}
+											aria-haspopup="listbox"
+											aria-expanded={isThresholdMenuOpen}
+											onClick={() => setIsThresholdMenuOpen((open) => !open)}
+										>
+											<span>{selectedThresholdLabel}</span>
+											<span className="settings-select-chevron" aria-hidden="true">⌄</span>
+										</button>
+										{isThresholdMenuOpen && (
+											<div className="settings-select-menu" role="listbox" aria-labelledby="large-file-threshold">
+												{SIMPLE_LARGE_FILE_THRESHOLD_OPTIONS.map((option) => (
+													<button
+														key={option.value}
+														type="button"
+														role="option"
+														aria-selected={option.value === largeFileMode.thresholdPreset}
+														className={`settings-select-option ${option.value === largeFileMode.thresholdPreset ? "selected" : ""}`}
+														onClick={() => {
+															updateLargeFileMode({ thresholdPreset: option.value as LargeFileThresholdPreset });
+															setIsThresholdMenuOpen(false);
+														}}
+													>
+														{option.label}
+													</button>
+												))}
+											</div>
+										)}
+									</div>
+								</div>
+								<p className="settings-inline-desc">
+									Files above this size open in Large File Mode. The default is 100 MB.
+								</p>
+							</div>
 						</div>
 					</section>
 
@@ -271,17 +360,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 						</div>
 					</section>
 
-					<section
-						className="settings-section about-section"
-						style={{
-							marginTop: "2rem",
-							paddingTop: "1.5rem",
-							borderTop: "1px solid var(--color-border-subtle)",
-							display: "flex",
-							gap: "1rem",
-							justifyContent: "center",
-						}}
-					>
+					<section className="settings-section about-section">
 						<a
 							href="https://github.com/danyalahmed1995/EXT"
 							onClick={(e) => openLink(e, "https://github.com/danyalahmed1995/EXT")}
