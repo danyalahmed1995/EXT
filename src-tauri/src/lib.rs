@@ -1295,11 +1295,7 @@ pub struct GitStatus {
 #[tauri::command]
 fn fetch_git_status(file_path: String) -> Option<GitStatus> {
     let path = Path::new(&file_path);
-    let current_dir = if path.is_file() {
-        path.parent()?
-    } else {
-        path
-    };
+    let current_dir = if path.is_file() { path.parent()? } else { path };
 
     let mut repo_root = None;
     for curr in current_dir.ancestors() {
@@ -1323,7 +1319,9 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
         return None;
     }
 
-    let mut branch_name = String::from_utf8_lossy(&branch_output.stdout).trim().to_string();
+    let mut branch_name = String::from_utf8_lossy(&branch_output.stdout)
+        .trim()
+        .to_string();
 
     if branch_name == "HEAD" {
         // detached HEAD, get short hash
@@ -1335,7 +1333,9 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
             .output()
             .ok()?;
         if hash_output.status.success() {
-            let short_hash = String::from_utf8_lossy(&hash_output.stdout).trim().to_string();
+            let short_hash = String::from_utf8_lossy(&hash_output.stdout)
+                .trim()
+                .to_string();
             branch_name = format!("detached: {}", short_hash);
         }
     }

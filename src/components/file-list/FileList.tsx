@@ -299,7 +299,7 @@ export const FileList: React.FC<FileListProps> = React.memo(({
       {/* Header */}
       <div className="file-list-header">
         <div className="file-list-header-left">
-          <span className="file-list-title">{title}</span>
+          <span className="file-list-title" title={title}>{title}</span>
           <span className="file-list-count">{files.length}</span>
         </div>
         <div className="file-list-sort-container">

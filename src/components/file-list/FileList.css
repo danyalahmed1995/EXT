@@ -32,12 +32,17 @@
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+  min-width: 0;
 }
 
 .file-list-title {
   font-size: var(--font-size-md);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .file-list-count {
@@ -46,6 +51,7 @@
   background: var(--color-surface-elevated);
   padding: 2px 8px;
   border-radius: var(--radius-pill);
+  flex-shrink: 0;
 }
 
 .file-list-sort {
@@ -61,6 +67,7 @@
   background: none;
   border: none;
   font-family: var(--font-ui);
+  flex-shrink: 0;
 }
 
 .file-list-sort:hover {

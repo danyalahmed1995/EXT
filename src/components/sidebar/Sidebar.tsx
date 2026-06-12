@@ -125,7 +125,7 @@ const SmartViewItem: React.FC<SmartViewItemProps> = ({
     onClick={onClick}
   >
     <span className="sidebar-item-icon">{icon}</span>
-    <span className="sidebar-item-label">{label}</span>
+    <span className="sidebar-item-label" title={label}>{label}</span>
     <span className="sidebar-item-count">{count}</span>
   </div>
 );
@@ -179,7 +179,7 @@ const WorkspaceItem: React.FC<WorkspaceItemProps> = ({
       <span className="workspace-item-icon">
         {getWorkspaceIcon(detectedIcon)}
       </span>
-      <span className="workspace-item-name">{name}</span>
+      <span className="workspace-item-name" title={name}>{name}</span>
       <span className="workspace-item-chevron">
         <ChevronRightIcon size={12} />
       </span>
