@@ -52,8 +52,16 @@ fn is_shell_extension(ext: &str) -> bool {
 fn is_shell_config_file(filename: &str) -> bool {
     matches!(
         filename.to_lowercase().as_str(),
-        ".bashrc" | ".bash_profile" | ".bash_login" | ".profile" | 
-        ".zshrc" | ".zprofile" | ".zshenv" | ".zlogin" | ".zlogout" | ".kshrc"
+        ".bashrc"
+            | ".bash_profile"
+            | ".bash_login"
+            | ".profile"
+            | ".zshrc"
+            | ".zprofile"
+            | ".zshenv"
+            | ".zlogin"
+            | ".zlogout"
+            | ".kshrc"
     )
 }
 
@@ -67,21 +75,26 @@ fn is_shell_script_by_shebang(path: &Path) -> bool {
         Ok(n) => n,
         Err(_) => return false,
     };
-    
+
     if bytes_read < 2 || &buffer[0..2] != b"#!" {
         return false;
     }
-    
+
     let first_line = String::from_utf8_lossy(&buffer[..bytes_read]);
     let shebang = first_line.lines().next().unwrap_or("").trim();
-    
+
     matches!(
         shebang,
-        "#!/bin/sh" | "#!/bin/bash" | "#!/usr/bin/bash" | 
-        "#!/usr/bin/env sh" | "#!/usr/bin/env bash" | 
-        "#!/usr/bin/env zsh" | "#!/usr/bin/env fish" | 
-        "#!/usr/bin/env ksh" | "#!/usr/bin/env csh" | 
-        "#!/usr/bin/env tcsh"
+        "#!/bin/sh"
+            | "#!/bin/bash"
+            | "#!/usr/bin/bash"
+            | "#!/usr/bin/env sh"
+            | "#!/usr/bin/env bash"
+            | "#!/usr/bin/env zsh"
+            | "#!/usr/bin/env fish"
+            | "#!/usr/bin/env ksh"
+            | "#!/usr/bin/env csh"
+            | "#!/usr/bin/env tcsh"
     )
 }
 
@@ -244,15 +257,16 @@ fn scan_directory(
         let entry_path = entry.path();
         if entry_path.is_file() {
             let file_name_str = entry_path.file_name().unwrap_or_default().to_string_lossy();
-            let ext_lower = entry_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
-            
+            let ext_lower = entry_path
+                .extension()
+                .and_then(|e| e.to_str())
+                .map(|s| s.to_lowercase())
+                .unwrap_or_default();
+
             let mut is_supported = false;
             let mut detected_ext = String::new();
 
-            if !ext_lower.is_empty() && is_supported_editable_extension(&ext_lower) {
-                is_supported = true;
-                detected_ext = format!(".{}", ext_lower);
-            } else if !ext_lower.is_empty() && is_shell_extension(&ext_lower) {
+            if !ext_lower.is_empty() && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower)) {
                 is_supported = true;
                 detected_ext = format!(".{}", ext_lower);
             } else if is_shell_config_file(&file_name_str) {
@@ -332,16 +346,17 @@ fn create_file(
 ) -> Result<ScannedFile, String> {
     let file_path = resolve_safe_path(&workspace_path, &file_name)?;
 
-    let ext_lower = file_path.extension().and_then(|e| e.to_str()).map(|s| s.to_lowercase()).unwrap_or_default();
+    let ext_lower = file_path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|s| s.to_lowercase())
+        .unwrap_or_default();
     let file_name_str = file_path.file_name().unwrap_or_default().to_string_lossy();
-    
+
     let mut is_supported = false;
     let mut detected_ext = String::new();
 
-    if !ext_lower.is_empty() && is_supported_editable_extension(&ext_lower) {
-        is_supported = true;
-        detected_ext = format!(".{}", ext_lower);
-    } else if !ext_lower.is_empty() && is_shell_extension(&ext_lower) {
+    if !ext_lower.is_empty() && (is_supported_editable_extension(&ext_lower) || is_shell_extension(&ext_lower)) {
         is_supported = true;
         detected_ext = format!(".{}", ext_lower);
     } else if is_shell_config_file(&file_name_str) {
@@ -355,8 +370,7 @@ fn create_file(
 
     if !is_supported {
         return Err(
-            "Only supported text, markdown, json, yaml, and shell files can be created"
-                .to_string(),
+            "Only supported text, markdown, json, yaml, and shell files can be created".to_string(),
         );
     }
 
