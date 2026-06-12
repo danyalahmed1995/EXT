@@ -194,6 +194,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  min-width: 0;
 }
 
 .sidebar-item-count {
@@ -283,6 +284,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   font-weight: var(--font-weight-medium);
+  min-width: 0;
 }
 
 .workspace-item-chevron {
