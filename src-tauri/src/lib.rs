@@ -1296,6 +1296,7 @@ pub struct GitStatus {
 use std::os::windows::process::CommandExt;
 
 fn create_git_command() -> std::process::Command {
+    #[allow(unused_mut)]
     let mut cmd = std::process::Command::new("git");
     #[cfg(target_os = "windows")]
     {
