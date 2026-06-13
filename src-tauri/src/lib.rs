@@ -1292,6 +1292,19 @@ pub struct GitStatus {
     is_dirty: bool,
 }
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+fn create_git_command() -> std::process::Command {
+    let mut cmd = std::process::Command::new("git");
+    #[cfg(target_os = "windows")]
+    {
+        const CREATE_NO_WINDOW: u32 = 0x08000000;
+        cmd.creation_flags(CREATE_NO_WINDOW);
+    }
+    cmd
+}
+
 #[tauri::command]
 fn fetch_git_status(file_path: String) -> Option<GitStatus> {
     let path = Path::new(&file_path);
@@ -1307,7 +1320,7 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
 
     let repo_root = repo_root?;
 
-    let branch_output = std::process::Command::new("git")
+    let branch_output = create_git_command()
         .arg("rev-parse")
         .arg("--abbrev-ref")
         .arg("HEAD")
@@ -1325,7 +1338,7 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
 
     if branch_name == "HEAD" {
         // detached HEAD, get short hash
-        let hash_output = std::process::Command::new("git")
+        let hash_output = create_git_command()
             .arg("rev-parse")
             .arg("--short")
             .arg("HEAD")
@@ -1340,7 +1353,7 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
         }
     }
 
-    let status_output = std::process::Command::new("git")
+    let status_output = create_git_command()
         .arg("status")
         .arg("--porcelain")
         .current_dir(&repo_root)
