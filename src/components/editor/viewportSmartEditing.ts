@@ -60,7 +60,7 @@ export function createViewportSmartEditingPlugin(fileId: string, options: Viewpo
     
     destroy() {
       if (this.timeout) clearTimeout(this.timeout);
-      // Optional: cachedViewportMetadata = null; but only if file switches.
+      cachedViewportMetadata = null;
     }
   });
 }

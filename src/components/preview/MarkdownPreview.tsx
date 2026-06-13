@@ -261,17 +261,20 @@ export const printMarkdownDocument = (content: string, absolutePath?: string): P
           `;
           document.head.appendChild(style);
 
+          let fallbackTimer: number;
+
           const cleanup = () => {
             if (document.body.contains(printContainer)) document.body.removeChild(printContainer);
             if (document.head.contains(style)) document.head.removeChild(style);
             window.removeEventListener('afterprint', cleanup);
+            if (fallbackTimer) window.clearTimeout(fallbackTimer);
           };
 
           window.addEventListener('afterprint', cleanup);
           
           setTimeout(() => {
             window.print();
-            setTimeout(cleanup, 120000);
+            fallbackTimer = window.setTimeout(cleanup, 120000);
             resolve();
           }, 50);
           
