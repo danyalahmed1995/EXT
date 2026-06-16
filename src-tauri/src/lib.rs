@@ -1166,14 +1166,14 @@ fn check_path_status(path: String) -> PathStatus {
     };
 
     status.exists = p.exists();
-    
+
     if let Some(parent) = p.parent() {
         status.parent_exists = parent.exists();
     } else {
         // If there's no parent, it might be the root itself.
         status.parent_exists = status.exists;
     }
-    
+
     // Find the root (e.g. C:\ or /)
     let mut current = p;
     while let Some(parent) = current.parent() {
