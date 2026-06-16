@@ -1147,6 +1147,43 @@ fn rename_workspace_folder(workspace_path: String, new_name: String) -> Result<S
     Ok(target_path.to_string_lossy().to_string())
 }
 
+#[derive(serde::Serialize)]
+struct PathStatus {
+    exists: bool,
+    parent_exists: bool,
+    root_exists: bool,
+    error: Option<String>,
+}
+
+#[tauri::command]
+fn check_path_status(path: String) -> PathStatus {
+    let p = Path::new(&path);
+    let mut status = PathStatus {
+        exists: false,
+        parent_exists: false,
+        root_exists: false,
+        error: None,
+    };
+
+    status.exists = p.exists();
+    
+    if let Some(parent) = p.parent() {
+        status.parent_exists = parent.exists();
+    } else {
+        // If there's no parent, it might be the root itself.
+        status.parent_exists = status.exists;
+    }
+    
+    // Find the root (e.g. C:\ or /)
+    let mut current = p;
+    while let Some(parent) = current.parent() {
+        current = parent;
+    }
+    status.root_exists = current.exists();
+
+    status
+}
+
 #[tauri::command]
 fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> Result<(), String> {
     let mut path = Path::new(&workspace_path).to_path_buf();
@@ -1392,6 +1429,7 @@ pub fn run() {
             move_file,
             delete_file,
             reveal_in_explorer,
+            check_path_status,
             read_file,
             read_file_chunk,
             search_file_chunk,

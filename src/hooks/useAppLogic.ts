@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo, useRef, startTransition } from 'react';
 import { ViewMode, EditorTab } from '../components/editor/EditorPanel';
 import { ContextMenuItem } from '../components/context-menu/ContextMenu';
-import { Workspace, FileItem, SortMode, AppearanceSettings } from '../types';
+import { Workspace, FileItem, SortMode, AppearanceSettings, RestoredSession, PathStatus } from '../types';
 import { invoke } from '@tauri-apps/api/core';
 import { open, ask } from '@tauri-apps/plugin-dialog';
 import { DragEndEvent, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -140,6 +140,70 @@ export function useAppLogic() {
     },
   }), []);
 
+  const validateWorkspaces = useCallback(async (currentWorkspaces: Workspace[]) => {
+    if (currentWorkspaces.length === 0) return;
+    const toKeep: Workspace[] = [];
+    let changed = false;
+
+    for (const ws of currentWorkspaces) {
+      try {
+        const status = await invoke<PathStatus>('check_path_status', { path: ws.path });
+        if (!status.exists && (status.parent_exists || status.root_exists)) {
+          // Confirm missing state after small delay
+          await new Promise(r => setTimeout(r, 600));
+          const status2 = await invoke<PathStatus>('check_path_status', { path: ws.path });
+          if (!status2.exists && (status2.parent_exists || status2.root_exists)) {
+            console.warn(`Workspace root confirmed deleted: ${ws.path}`);
+            changed = true;
+            continue;
+          }
+        }
+        toKeep.push(ws);
+      } catch (e) {
+        console.error('Error validating workspace path:', e);
+        toKeep.push(ws);
+      }
+    }
+
+    if (changed) {
+      setWorkspaces(toKeep);
+      localStorage.setItem('ext_workspaces', JSON.stringify(toKeep));
+
+      // Clean up files
+      setFiles((files: FileItem[]) => files.filter((f: FileItem) => toKeep.some(w => w.id === f.workspaceId)));
+      
+      // Clean up tabs
+      setOpenTabs(tabs => {
+        const remainingTabs = tabs.filter(t => !t.workspacePath || toKeep.some(w => w.path === t.workspacePath));
+        if (remainingTabs.length < tabs.length) {
+          // Force active file cleanup if it was removed
+          setActiveFileId(current => {
+            if (current && !remainingTabs.some(t => t.id === current)) {
+              return remainingTabs.length > 0 ? remainingTabs[0].id : null;
+            }
+            return current;
+          });
+        }
+        return remainingTabs;
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    let timeout: number | null = null;
+    const handleFocus = () => {
+      if (timeout) window.clearTimeout(timeout);
+      timeout = window.setTimeout(() => {
+        validateWorkspaces(workspaces);
+      }, 500);
+    };
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      if (timeout) window.clearTimeout(timeout);
+    };
+  }, [validateWorkspaces, workspaces]);
+
   // ── Initialization (Load Persistence) ───────────────
 
   useEffect(() => {
@@ -168,6 +232,31 @@ export function useAppLogic() {
             localStorage.setItem('ext_workspaces', JSON.stringify(storedWorkspaces));
           }
         }
+
+        // Validate workspaces on startup
+        const validWorkspaces: Workspace[] = [];
+        for (const ws of storedWorkspaces) {
+          try {
+            const status = await invoke<PathStatus>('check_path_status', { path: ws.path });
+            if (!status.exists && (status.parent_exists || status.root_exists)) {
+              await new Promise(r => setTimeout(r, 600));
+              const status2 = await invoke<PathStatus>('check_path_status', { path: ws.path });
+              if (!status2.exists && (status2.parent_exists || status2.root_exists)) {
+                console.warn(`Startup cleanup: Workspace root confirmed deleted: ${ws.path}`);
+                continue;
+              }
+            }
+            validWorkspaces.push(ws);
+          } catch (e) {
+            console.error('Failed to validate workspace on startup:', e);
+            validWorkspaces.push(ws);
+          }
+        }
+
+        if (validWorkspaces.length < storedWorkspaces.length) {
+          storedWorkspaces = validWorkspaces;
+          localStorage.setItem('ext_workspaces', JSON.stringify(storedWorkspaces));
+        }
         
         const storedFavorites: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
         const storedSortMode: SortMode = (localStorage.getItem('ext_sortMode') as SortMode) || 'date-desc';
@@ -180,9 +269,86 @@ export function useAppLogic() {
         setCustomFileOrder(storedCustomOrder);
         setAppearance(storedAppearance);
         
+        // --- SESSION RESTORE ---
+        const savedSessionStr = localStorage.getItem('ext_session');
+        let sessionRestored = false;
+        
+        if (savedSessionStr) {
+          try {
+            const session: RestoredSession = JSON.parse(savedSessionStr);
+            if (session.openTabs && session.openTabs.length > 0) {
+              // Filter out tabs that belong to workspaces we just deleted
+              session.openTabs = session.openTabs.filter(t => !t.workspaceRoot || storedWorkspaces.some(w => w.path === t.workspaceRoot));
+              
+              if (session.openTabs.length > 0) {
+                const restoredTabs: EditorTab[] = session.openTabs.map(t => {
+                // Determine file name and extension
+                const normalizedPath = t.path.replace(/\\/g, '/');
+                const name = normalizedPath.split('/').pop() || 'Unknown';
+                const extension = name.includes('.') ? name.split('.').pop() || '' : '';
+                
+                return {
+                  id: t.id,
+                  name,
+                  extension,
+                  content: '',
+                  isDirty: false,
+                  absolutePath: t.path,
+                  lineEnding: 'LF',
+                  isLoading: true,
+                  workspacePath: t.workspaceRoot,
+                };
+              });
+
+              setOpenTabs(restoredTabs);
+              
+              if (session.activeTabId && session.openTabs.some(t => t.id === session.activeTabId)) {
+                setActiveFileId(session.activeTabId);
+              } else if (restoredTabs.length > 0) {
+                setActiveFileId(restoredTabs[0].id);
+              }
+              
+              if (session.viewMode) {
+                setViewMode(session.viewMode);
+              }
+
+              sessionRestored = true;
+
+              // Fire off async loads for restored tabs without blocking UI
+              restoredTabs.forEach(tab => {
+                const wsPath = tab.workspacePath || '';
+                // Since tab.absolutePath is an absolute path, Path::join in Rust will override wsPath.
+                // Or if it's relative, it will join correctly.
+                invoke<string>('read_file', {
+                  workspacePath: wsPath,
+                  relativePath: tab.absolutePath,
+                  allowLargeFileRead: false,
+                }).then(content => {
+                  startTransition(() => {
+                    setOpenTabs(tabs => tabs.map(t => 
+                      t.id === tab.id ? { ...t, content: content || '', lineEnding: detectLineEnding(content || ''), isLoading: false } : t
+                    ));
+                  });
+                }).catch(err => {
+                  console.warn(`Failed to read restored file: ${tab.absolutePath}`, err);
+                  // Keep missing or unreadable tabs open with an error state
+                  startTransition(() => {
+                    setOpenTabs(tabs => tabs.map(t => 
+                      t.id === tab.id ? { ...t, content: '', isLoading: false, loadError: 'File unavailable or moved. Retry, reveal location, or close this tab.' } : t
+                    ));
+                  });
+                });
+              });
+            }
+            }
+          } catch (e) {
+            console.error('Failed to parse session:', e);
+          }
+        }
+        
         let allFiles: FileItem[] = [];
         
-        // Scan all stored workspaces concurrently
+        // Scan all stored workspaces concurrently (background enrichment)
         await Promise.all(
           storedWorkspaces.map(async (ws) => {
             try {
@@ -195,7 +361,7 @@ export function useAppLogic() {
               // Apply favorite status
               const scannedWithFavs = result.files.map(f => ({
                 ...f,
-                isFavorite: storedFavorites.includes(f.id) || storedFavorites.includes(f.relativePath), // Fallback to path just in case
+                isFavorite: storedFavorites.includes(f.id) || storedFavorites.includes(f.relativePath),
               }));
               
               allFiles = allFiles.concat(scannedWithFavs);
@@ -207,8 +373,8 @@ export function useAppLogic() {
         
         setFiles(allFiles);
         
-        // Auto-open recent file or first file if nothing active
-        if (allFiles.length > 0) {
+        // Fallback: Auto-open recent file or first file only if NO session was restored
+        if (!sessionRestored && allFiles.length > 0) {
           // Sort by modified
           allFiles.sort((a, b) => new Date(b.modifiedAt).getTime() - new Date(a.modifiedAt).getTime());
           const first = allFiles[0];
@@ -240,7 +406,7 @@ export function useAppLogic() {
               lineEnding: detectLineEnding(content),
             }]);
           }
-        } else {
+        } else if (!sessionRestored) {
           setActiveFileId(null);
         }
       } catch (e) {
@@ -428,8 +594,10 @@ export function useAppLogic() {
 
   const handleFileSelect = useCallback(
     (fileId: string) => {
-      const alreadyOpen = openTabs.some((t) => t.id === fileId);
-      if (activeFileId === fileId && alreadyOpen) {
+      const existingTab = openTabs.find((t) => t.id === fileId);
+      const alreadyOpen = Boolean(existingTab);
+      
+      if (activeFileId === fileId && alreadyOpen && !existingTab?.loadError) {
         setContextMenu((prev) => (prev === null ? prev : null));
         return;
       }
@@ -437,7 +605,7 @@ export function useAppLogic() {
       setContextMenu((prev) => (prev === null ? prev : null));
       setActiveFileId((prev) => (prev === fileId ? prev : fileId));
 
-      if (alreadyOpen || pendingOpenFileIds.current.has(fileId)) return;
+      if ((alreadyOpen && !existingTab?.loadError) || pendingOpenFileIds.current.has(fileId)) return;
 
       const file = filesById.get(fileId);
       const workspace = file ? workspacesById.get(file.workspaceId) : undefined;
@@ -447,7 +615,9 @@ export function useAppLogic() {
 
       // Instantly insert a loading tab so the UI doesn't jump to empty.
       setOpenTabs((tabs) => {
-        if (tabs.some((t) => t.id === fileId)) return tabs;
+        if (tabs.some((t) => t.id === fileId)) {
+          return tabs.map(t => t.id === fileId ? { ...t, isLoading: true, loadError: undefined } : t);
+        }
         if (shouldUseLargeFileEngine(file.size, appearanceRef.current.largeFileMode)) {
           return [...tabs, createLargeFileTab(file, workspace)];
         }
@@ -1516,6 +1686,22 @@ export function useAppLogic() {
 
   // ── Tray Integration ────────────────────────────────────
 
+  // Helper to force-save session instantly on exit
+  const forceSaveSession = useCallback(() => {
+    const session: RestoredSession = {
+      version: 1,
+      activeTabId: activeFileId || undefined,
+      viewMode,
+      openTabs: openTabs.map(t => ({
+        id: t.id,
+        path: t.absolutePath,
+        workspaceId: workspaces.find(w => w.path === t.workspacePath)?.id,
+        workspaceRoot: t.workspacePath,
+      }))
+    };
+    localStorage.setItem('ext_session', JSON.stringify(session));
+  }, [activeFileId, openTabs, viewMode, workspaces]);
+
   useEffect(() => {
     const unlistenExit = safeListen('tray-exit-requested', async () => {
       const hasDirty = openTabs.some((t) => t.isDirty);
@@ -1529,6 +1715,7 @@ export function useAppLogic() {
         if (!confirmed) return;
       }
       console.log('App quit allowed');
+      forceSaveSession();
       invoke('force_exit');
     });
 
@@ -1544,6 +1731,7 @@ export function useAppLogic() {
         if (!confirmed) return;
       }
       console.log('App restart allowed');
+      forceSaveSession();
       invoke('force_restart');
     });
 
@@ -1551,7 +1739,16 @@ export function useAppLogic() {
       unlistenExit();
       unlistenRestart();
     };
-  }, [openTabs]);
+  }, [openTabs, forceSaveSession]);
+
+  // ── Session Debounced Persistence ───────────────────────
+  
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      forceSaveSession();
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [openTabs, activeFileId, viewMode, workspaces, forceSaveSession]);
 
 
   return {

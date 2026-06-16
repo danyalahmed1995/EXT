@@ -46,3 +46,29 @@ export interface AppearanceSettings {
   previewCentered?: boolean;
   largeFileMode: LargeFileSettings;
 }
+
+export interface RestoredTab {
+  id: string;
+  path: string;
+  workspaceId?: string;
+  workspaceRoot?: string;
+  title?: string;
+  isPinned?: boolean;
+}
+
+export interface RestoredSession {
+  version: number;
+  activeWorkspaceId?: string;
+  activeWorkspaceRoot?: string;
+  activeTabId?: string;
+  activeTabPath?: string;
+  openTabs: RestoredTab[];
+  viewMode?: 'editor' | 'preview' | 'split';
+}
+
+export interface PathStatus {
+  exists: boolean;
+  parent_exists: boolean;
+  root_exists: boolean;
+  error?: string;
+}

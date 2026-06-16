@@ -14,7 +14,9 @@ import {
   NewFileIcon,
   SettingsIcon,
   PrintIcon,
+  WarningIcon,
 } from '../../icons/icons';
+import { invoke } from '@tauri-apps/api/core';
 import { MarkdownPreview, printMarkdownDocument } from '../preview/MarkdownPreview';
 import { ThemeDropdown } from '../theme/ThemeDropdown';
 import type { ConvertibleLineEnding, LineEnding } from '../../utils/lineEndings';
@@ -42,6 +44,7 @@ export interface EditorTab {
   saveStatus?: 'saving' | 'saved' | 'error' | 'unsaved';
   absolutePath: string;
   isLoading?: boolean;
+  loadError?: string;
   lineEnding?: LineEnding;
   isLargeFile?: boolean;
   workspacePath?: string;
@@ -471,7 +474,33 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
           className="editor-tab-content-wrapper active"
           style={{ flex: 1, width: '100%', height: '100%', display: 'flex' }}
         >
-          {activeTab.isLargeFile && activeTab.largeFileMetadata ? (
+          {activeTab.loadError ? (
+            <div className="editor-error-state">
+              <div className="editor-error-card">
+                <div className="editor-error-icon">
+                  <WarningIcon size={48} />
+                </div>
+                <div className="editor-error-title">File unavailable or moved</div>
+                <div className="editor-error-desc">
+                  The file may be on a disconnected drive, temporarily locked, moved, or deleted.
+                </div>
+                <div className="editor-error-actions">
+                  <button className="editor-error-btn primary" onClick={() => onTabSelect(activeTab.id)}>
+                    Retry
+                  </button>
+                  <button 
+                    className="editor-error-btn secondary" 
+                    onClick={() => invoke('reveal_in_explorer', { workspacePath: activeTab.absolutePath, relativePath: null })}
+                  >
+                    Reveal Location
+                  </button>
+                  <button className="editor-error-btn ghost" onClick={() => onTabClose(activeTab.id)}>
+                    Close Tab
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : activeTab.isLargeFile && activeTab.largeFileMetadata ? (
             <div className="editor-content-editor full">
               <LargeFileModePanel
                 tabId={activeTab.id}

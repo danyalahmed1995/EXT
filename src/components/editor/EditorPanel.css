@@ -705,3 +705,110 @@
     grid-template-columns: repeat(2, minmax(120px, 1fr));
   }
 }
+
+/* ── Error State UI ─────────────────────────────────────── */
+
+.editor-error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  width: 100%;
+  padding: var(--space-xl);
+  background: var(--color-bg);
+}
+
+.editor-error-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-2xl) var(--space-xl);
+  max-width: 480px;
+  width: 100%;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  animation: fade-in 0.3s ease-out;
+}
+
+.editor-error-icon {
+  color: var(--color-error);
+  margin-bottom: var(--space-lg);
+  background: rgba(255, 69, 58, 0.1); /* Assuming --color-error is somewhat red */
+  padding: var(--space-md);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-error-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-text);
+  margin-bottom: var(--space-sm);
+}
+
+.editor-error-desc {
+  font-size: 0.95rem;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+  margin-bottom: var(--space-xl);
+}
+
+.editor-error-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.editor-error-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 36px;
+  padding: 0 var(--space-lg);
+  font-size: 0.9rem;
+  font-weight: 500;
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 1px solid transparent;
+}
+
+.editor-error-btn.primary {
+  background: var(--color-accent);
+  color: white;
+}
+
+.editor-error-btn.primary:hover {
+  background: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.editor-error-btn.secondary {
+  background: transparent;
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+
+.editor-error-btn.secondary:hover {
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
+}
+
+.editor-error-btn.ghost {
+  background: transparent;
+  color: var(--color-text-muted);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.editor-error-btn.ghost:hover {
+  color: var(--color-text);
+  background: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
+}
