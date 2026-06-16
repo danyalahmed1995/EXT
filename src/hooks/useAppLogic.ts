@@ -1081,15 +1081,19 @@ export function useAppLogic() {
     if (!file) return;
 
     try {
-      await invoke('copy_file_to_clipboard', {
-        absolutePath: file.absolutePath
-      });
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(file.absolutePath);
+      } else {
+        await invoke('copy_file_to_clipboard', {
+          absolutePath: file.absolutePath
+        });
+      }
       showToast('File copied to clipboard!');
     } catch (err) {
       console.error('Failed to copy file:', err);
       alert(`Failed to copy file: ${err}`);
     }
-  }, [files]);
+  }, [files, showToast]);
 
   // ── Open in Default App Handler ─────────────────────
 
@@ -1289,14 +1293,22 @@ export function useAppLogic() {
 
   // ── External File Change Detection ──────────────────────
 
-  const handleWindowFocus = useCallback(async () => {
-    // 1. Rescan all workspaces to update the file explorer
-    try {
-      let scannedFiles: FileItem[] = [];
-      const storedFavs: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
-      
-      await Promise.all(
-        workspaces.map(async (ws) => {
+  const focusScanTimeoutRef = useRef<number | null>(null);
+
+  const handleWindowFocus = useCallback(() => {
+    if (focusScanTimeoutRef.current !== null) {
+      window.clearTimeout(focusScanTimeoutRef.current);
+    }
+    
+    // Debounce the refresh to allow UI to paint first and avoid immediate freeze on resume
+    focusScanTimeoutRef.current = window.setTimeout(async () => {
+      // 1. Rescan all workspaces to update the file explorer
+      try {
+        let scannedFiles: FileItem[] = [];
+        const storedFavs: string[] = JSON.parse(localStorage.getItem('ext_favorites') || '[]');
+        
+        // Chunk/Sequence large file/workspace scans to not block all at once
+        for (const ws of workspaces) {
           try {
             const result: { files: FileItem[], detectedIcon: string } = await invoke('scan_directory', {
               path: ws.path,
@@ -1312,79 +1324,79 @@ export function useAppLogic() {
           } catch (err) {
             console.error(`Failed to scan workspace ${ws.name} on focus:`, err);
           }
-        })
-      );
-      
-      if (scannedFiles.length > 0) {
-        setFiles(scannedFiles);
+        }
         
-        // Close tabs for files that no longer exist on disk
-        const scannedIds = new Set(scannedFiles.map(f => f.id));
-        for (const tab of openTabs) {
-          if (!scannedIds.has(tab.id)) {
-            handleTabClose(tab.id);
+        if (scannedFiles.length > 0) {
+          setFiles(scannedFiles);
+          
+          // Close tabs for files that no longer exist on disk
+          const scannedIds = new Set(scannedFiles.map(f => f.id));
+          for (const tab of openTabs) {
+            if (!scannedIds.has(tab.id)) {
+              handleTabClose(tab.id);
+            }
           }
         }
+      } catch (e) {
+        console.error('Error rescanning workspaces on focus', e);
       }
-    } catch (e) {
-      console.error('Error rescanning workspaces on focus', e);
-    }
 
-    // 2. Check active file for external modification
-    if (!activeFileId) return;
-    const file = files.find(f => f.id === activeFileId);
-    const tab = openTabs.find(t => t.id === activeFileId);
-    const ws = workspaces.find(w => w.id === file?.workspaceId);
-    
-    if (!file || !tab || !ws) return;
-    
-    try {
-      const diskModifiedTime = await invoke<string>('get_file_modified_time', {
-        workspacePath: ws.path,
-        relativePath: file.relativePath
-      });
+      // 2. Check active file for external modification
+      if (!activeFileId) return;
+      const file = files.find(f => f.id === activeFileId);
+      const tab = openTabs.find(t => t.id === activeFileId);
+      const ws = workspaces.find(w => w.id === file?.workspaceId);
       
-      if (new Date(diskModifiedTime).getTime() > new Date(file.modifiedAt).getTime()) {
-        if (tab.isLargeFile || shouldUseLargeFileEngine(file.size, appearanceRef.current.largeFileMode)) {
-          const refreshedFile = { ...file, modifiedAt: diskModifiedTime };
-          setFiles(prev => prev.map(f => f.id === file.id ? refreshedFile : f));
-          setOpenTabs(prev => prev.map(t => t.id === file.id ? createLargeFileTab(refreshedFile, ws) : t));
-          return;
-        }
+      if (!file || !tab || !ws) return;
+      
+      try {
+        const diskModifiedTime = await invoke<string>('get_file_modified_time', {
+          workspacePath: ws.path,
+          relativePath: file.relativePath
+        });
+        
+        if (new Date(diskModifiedTime).getTime() > new Date(file.modifiedAt).getTime()) {
+          if (tab.isLargeFile || shouldUseLargeFileEngine(file.size, appearanceRef.current.largeFileMode)) {
+            const refreshedFile = { ...file, modifiedAt: diskModifiedTime };
+            setFiles(prev => prev.map(f => f.id === file.id ? refreshedFile : f));
+            setOpenTabs(prev => prev.map(t => t.id === file.id ? createLargeFileTab(refreshedFile, ws) : t));
+            return;
+          }
 
-        if (tab.isDirty) {
-          const confirmed = await ask('This file changed outside EXT. Reloading will replace your unsaved changes.', {
-            title: 'External Modification',
-            kind: 'warning',
-            okLabel: 'Reload from disk',
-            cancelLabel: 'Keep current version'
-          });
-          
-          if (confirmed) {
+          if (tab.isDirty) {
+            const confirmed = await ask('This file changed outside EXT. Reloading will replace your unsaved changes.', {
+              title: 'External Modification',
+              kind: 'warning',
+              okLabel: 'Reload from disk',
+              cancelLabel: 'Keep current version'
+            });
+            
+            if (confirmed) {
+              const newContent = await invoke<string>('read_file', {
+                workspacePath: ws.path,
+                relativePath: file.relativePath,
+                allowLargeFileRead: false,
+              });
+              setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
+              setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent), isDirty: false, saveStatus: 'saved' } : t));
+            } else {
+              setFiles(prev => prev.map(f => f.id === file.id ? { ...f, modifiedAt: diskModifiedTime } : f));
+            }
+          } else {
             const newContent = await invoke<string>('read_file', {
               workspacePath: ws.path,
               relativePath: file.relativePath,
               allowLargeFileRead: false,
             });
             setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent), isDirty: false, saveStatus: 'saved' } : t));
-          } else {
-            setFiles(prev => prev.map(f => f.id === file.id ? { ...f, modifiedAt: diskModifiedTime } : f));
+            setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent) } : t));
           }
-        } else {
-          const newContent = await invoke<string>('read_file', {
-            workspacePath: ws.path,
-            relativePath: file.relativePath,
-            allowLargeFileRead: false,
-          });
-          setFiles(prev => prev.map(f => f.id === file.id ? { ...f, content: newContent, modifiedAt: diskModifiedTime } : f));
-          setOpenTabs(prev => prev.map(t => t.id === file.id ? { ...t, content: newContent, lineEnding: detectLineEnding(newContent) } : t));
         }
+      } catch (e) {
+        console.error('Error checking external modification', e);
       }
-    } catch (e) {
-      console.error('Error checking external modification', e);
-    }
-  }, [activeFileId, files, openTabs, workspaces, handleTabClose, createLargeFileTab]);
+    }, 1000);
+  }, [activeFileId, files, openTabs, workspaces, handleTabClose, createLargeFileTab, appearanceRef]);
 
   useEffect(() => {
     return safeListen('tauri://focus', handleWindowFocus);

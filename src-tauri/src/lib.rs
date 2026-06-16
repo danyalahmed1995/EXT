@@ -1155,15 +1155,25 @@ fn reveal_in_explorer(workspace_path: String, relative_path: Option<String>) -> 
         path = path.join(rel);
     }
 
+    // Fallback to parent if path does not exist
+    while !path.exists() {
+        if let Some(parent) = path.parent() {
+            path = parent.to_path_buf();
+        } else {
+            break;
+        }
+    }
+
     if !path.exists() {
-        return Err("Path does not exist".to_string());
+        return Err("Path does not exist and no fallback parent found".to_string());
     }
 
     #[cfg(target_os = "windows")]
     {
+        let path_str = path.to_string_lossy().replace("/", "\\");
         std::process::Command::new("explorer")
             .arg("/select,")
-            .arg(path)
+            .arg(&path_str)
             .spawn()
             .map_err(|e| format!("Failed to open explorer: {}", e))?;
     }
@@ -1199,14 +1209,8 @@ fn copy_file_to_clipboard(absolute_path: String) -> Result<(), String> {
     let _ = &absolute_path;
     #[cfg(target_os = "windows")]
     {
-        std::process::Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                &format!("Set-Clipboard -Path '{}'", absolute_path.replace("'", "''")),
-            ])
-            .spawn()
-            .map_err(|e| format!("Failed to copy file to clipboard: {}", e))?;
+        // Moved to frontend navigator.clipboard.writeText to avoid terminal flashing
+        // This function shouldn't be called on Windows anymore, but leaving as a no-op fallback
     }
 
     #[cfg(target_os = "macos")]
