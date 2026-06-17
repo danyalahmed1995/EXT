@@ -1,4 +1,7 @@
-use portable_pty::{CommandBuilder, NativePtySystem, PtySize, PtySystem, MasterPty, Child};
+#![allow(unused_imports)]
+#![allow(clippy::type_complexity)]
+
+use portable_pty::{Child, CommandBuilder, MasterPty, NativePtySystem, PtySize, PtySystem};
 use serde::Serialize;
 use std::env;
 use std::path::Path;
@@ -27,15 +30,22 @@ fn spawn_shell(
     pty_system: &dyn PtySystem,
     pty_size: PtySize,
     cwd: &str,
-) -> Result<(Box<dyn MasterPty + Send>, Box<dyn Child + Send + Sync>, String), String> {
+) -> Result<
+    (
+        Box<dyn MasterPty + Send>,
+        Box<dyn Child + Send + Sync>,
+        String,
+    ),
+    String,
+> {
     let pair = pty_system.openpty(pty_size).map_err(|e| e.to_string())?;
-    
+
     let mut cmd = CommandBuilder::new("pwsh.exe");
     cmd.cwd(cwd);
     if let Ok(child) = pair.slave.spawn_command(cmd) {
         return Ok((pair.master, child, "pwsh".to_string()));
     }
-    
+
     let mut cmd2 = CommandBuilder::new("powershell.exe");
     cmd2.cwd(cwd);
     let child2 = pair.slave.spawn_command(cmd2).map_err(|e| e.to_string())?;
@@ -47,25 +57,36 @@ fn spawn_shell(
     pty_system: &dyn PtySystem,
     pty_size: PtySize,
     cwd: &str,
-) -> Result<(Box<dyn MasterPty + Send>, Box<dyn Child + Send + Sync>, String), String> {
+) -> Result<
+    (
+        Box<dyn MasterPty + Send>,
+        Box<dyn Child + Send + Sync>,
+        String,
+    ),
+    String,
+> {
     let shell = env::var("SHELL").unwrap_or_else(|_| {
         #[cfg(target_os = "macos")]
-        { "/bin/zsh".to_string() }
+        {
+            "/bin/zsh".to_string()
+        }
         #[cfg(not(target_os = "macos"))]
-        { "/bin/bash".to_string() }
+        {
+            "/bin/bash".to_string()
+        }
     });
-    
+
     let pair = pty_system.openpty(pty_size).map_err(|e| e.to_string())?;
     let mut cmd = CommandBuilder::new(&shell);
     cmd.cwd(cwd);
     let child = pair.slave.spawn_command(cmd).map_err(|e| e.to_string())?;
-    
+
     let shell_name = Path::new(&shell)
         .file_name()
         .unwrap_or_default()
         .to_string_lossy()
         .to_string();
-        
+
     Ok((pair.master, child, shell_name))
 }
 
@@ -76,12 +97,12 @@ pub fn spawn_terminal(
     state: State<'_, TerminalState>,
 ) -> Result<TerminalSpawnResult, String> {
     let mut instance_lock = state.instance.lock().unwrap();
-    
+
     // Kill existing
     if let Some(mut existing) = instance_lock.take() {
         let _ = existing.child.kill();
     }
-    
+
     let pty_system = NativePtySystem::default();
     let pty_size = PtySize {
         rows: 24,
@@ -89,16 +110,20 @@ pub fn spawn_terminal(
         pixel_width: 0,
         pixel_height: 0,
     };
-    
+
     match spawn_shell(&pty_system, pty_size, &cwd) {
         Ok((master, child, shell_name)) => {
             let master_clone = master.try_clone_reader().map_err(|e| e.to_string())?;
             let writer = master.take_writer().map_err(|e| e.to_string())?;
-            
-            *instance_lock = Some(TerminalInstance { master, child, writer });
-            
+
+            *instance_lock = Some(TerminalInstance {
+                master,
+                child,
+                writer,
+            });
+
             let (tx, rx) = std::sync::mpsc::channel::<Vec<u8>>();
-            
+
             // Reader thread
             std::thread::spawn(move || {
                 let mut reader = std::io::BufReader::new(master_clone);
@@ -115,7 +140,7 @@ pub fn spawn_terminal(
                     }
                 }
             });
-            
+
             // Emitter thread
             let app_clone = app.clone();
             std::thread::spawn(move || {
@@ -146,7 +171,7 @@ pub fn spawn_terminal(
                     }
                 }
             });
-            
+
             Ok(TerminalSpawnResult {
                 success: true,
                 shell: shell_name,
@@ -172,7 +197,11 @@ pub fn write_terminal(data: String, state: State<'_, TerminalState>) -> Result<(
 }
 
 #[tauri::command]
-pub fn resize_terminal(rows: u16, cols: u16, state: State<'_, TerminalState>) -> Result<(), String> {
+pub fn resize_terminal(
+    rows: u16,
+    cols: u16,
+    state: State<'_, TerminalState>,
+) -> Result<(), String> {
     if let Some(instance) = state.instance.lock().unwrap().as_mut() {
         let size = PtySize {
             rows,

@@ -1,6 +1,6 @@
 pub mod terminal;
-use terminal::{spawn_terminal, write_terminal, resize_terminal, kill_terminal, TerminalState};
 use std::sync::{Arc, Mutex};
+use terminal::{kill_terminal, resize_terminal, spawn_terminal, write_terminal, TerminalState};
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
