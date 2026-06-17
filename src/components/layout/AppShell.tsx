@@ -7,6 +7,7 @@ interface AppShellProps {
   sidebar: React.ReactNode;
   fileList: React.ReactNode;
   editor: React.ReactNode;
+  terminal?: React.ReactNode;
   isSidebarVisible?: boolean;
 }
 
@@ -61,12 +62,64 @@ const ResizeHandle: React.FC<ResizeHandleProps> = ({ onDrag }) => {
   );
 };
 
+// ── ResizeHandleVertical Component ──────────────────
+
+interface ResizeHandleVerticalProps {
+  onDrag: (deltaY: number) => void;
+}
+
+const ResizeHandleVertical: React.FC<ResizeHandleVerticalProps> = ({ onDrag }) => {
+  const [dragging, setDragging] = useState(false);
+  const lastY = useRef(0);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setDragging(true);
+    lastY.current = e.clientY;
+  }, []);
+
+  useEffect(() => {
+    if (!dragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const delta = e.clientY - lastY.current;
+      lastY.current = e.clientY;
+      onDrag(delta);
+    };
+
+    const handleMouseUp = () => {
+      setDragging(false);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+
+    document.body.style.cursor = 'row-resize';
+    document.body.style.userSelect = 'none';
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, [dragging, onDrag]);
+
+  return (
+    <div
+      className={`resize-handle-vertical ${dragging ? 'dragging' : ''}`}
+      onMouseDown={handleMouseDown}
+    />
+  );
+};
+
 // ── AppShell Component ──────────────────────────────
 
 export const AppShell: React.FC<AppShellProps> = ({
   sidebar,
   fileList,
   editor,
+  terminal,
   isSidebarVisible = true,
 }) => {
   const [sidebarWidth, setSidebarWidth] = useState(220);
@@ -79,6 +132,13 @@ export const AppShell: React.FC<AppShellProps> = ({
   const handleFileListResize = useCallback((delta: number) => {
     setFileListWidth((w) => Math.max(200, Math.min(500, w + delta)));
   }, []);
+
+  const [terminalHeight, setTerminalHeight] = useState(250);
+  const handleTerminalResize = useCallback((deltaY: number) => {
+    setTerminalHeight((h) => Math.max(100, Math.min(800, h - deltaY)));
+  }, []);
+
+  const isTerminalVisible = terminal && (!React.isValidElement(terminal) || (terminal.props as any).isVisible !== false);
 
   return (
     <div className="app-shell">
@@ -95,7 +155,27 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
       <ResizeHandle onDrag={handleFileListResize} />
       <div className="pane-editor">
-        {editor}
+        <div className="pane-editor-main">
+          {editor}
+        </div>
+        {terminal && (
+          <>
+            {isTerminalVisible && (
+              <ResizeHandleVertical onDrag={handleTerminalResize} />
+            )}
+            <div 
+              className="pane-terminal" 
+              style={{ 
+                height: terminalHeight, 
+                display: isTerminalVisible ? 'flex' : 'none' 
+              }}
+            >
+              {React.isValidElement(terminal) 
+                ? React.cloneElement(terminal as React.ReactElement<any>, { height: terminalHeight }) 
+                : terminal}
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

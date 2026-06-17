@@ -44,6 +44,8 @@ export interface AppearanceSettings {
   ignoredDirs: string[];
   enableProfiler?: boolean;
   previewCentered?: boolean;
+  enableTerminal?: boolean;
+  terminalAutoSyncCwd?: boolean;
   largeFileMode: LargeFileSettings;
 }
 

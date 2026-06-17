@@ -93,6 +93,13 @@ MDX is treated as Markdown-like source. EXT does not execute imports, exports, J
 - Do not execute, source, lint, format, or run shell scripts.
 - Use viewport-bounded highlighting for large structured/source files where needed.
 
+### Terminal
+
+- Open an integrated terminal directly in the workspace.
+- Seamlessly matches EXT themes.
+- Optionally syncs the terminal directory to the active file's parent folder.
+- Toggle visibility quickly with `Ctrl`/`Cmd` + `` ` ``.
+
 ### File actions
 
 - Create files and folders.
@@ -128,7 +135,6 @@ EXT is not:
 - a hosted vault
 - a collaboration suite
 - a WYSIWYG editor
-- a terminal
 - a Git client
 - an IDE
 - a publishing system
@@ -137,11 +143,15 @@ It is a local workspace and editor for common project/doc files.
 
 ## Demo
 
-![EXT Demo Part 1](./public/demo-example/demo_part1.gif)
-![EXT Demo Part 2](./public/demo-example/demo_part2.gif)
-![EXT Demo Part 3](./public/demo-example/demo_part3.gif)
-![EXT Demo Part 4](./public/demo-example/demo_part4.gif)
-![EXT Demo Part 5](./public/demo-example/demo_part5.gif)
+![EXT Demo Part 1](./public/demo-example/ext_demo_1.gif)
+![EXT Demo Part 2](./public/demo-example/ext_demo_2.gif)
+![EXT Demo Part 3](./public/demo-example/ext_demo_3.gif)
+![EXT Demo Part 4](./public/demo-example/ext_demo_4.gif)
+![EXT Demo Part 5](./public/demo-example/ext_demo_5.gif)
+![EXT Demo Part 6](./public/demo-example/ext_demo_6.gif)
+![EXT Demo Part 7](./public/demo-example/ext_demo_7.gif)
+![EXT Demo Part 8](./public/demo-example/ext_demo_8.gif)
+![EXT Demo Part 9](./public/demo-example/ext_demo_9.gif)
 
 Demo media lives in the repository for README and development use. Production builds strip demo media and development examples from packaged apps.
 
@@ -171,6 +181,7 @@ On macOS, use `Cmd` where the table says `Ctrl`/`Cmd`.
 | `Ctrl`/`Cmd` + `P` | Focus global file search / quick open |
 | `Ctrl`/`Cmd` + `F` | Open find and replace |
 | `Ctrl`/`Cmd` + `B` | Toggle the sidebar |
+| `Ctrl`/`Cmd` + `` ` `` | Toggle the terminal panel |
 | `Ctrl`/`Cmd` + `1` | Focus the editor |
 | `Ctrl`/`Cmd` + `2` | Focus the preview / split area |
 | `Ctrl`/`Cmd` + `Tab` | Switch to the next tab |
