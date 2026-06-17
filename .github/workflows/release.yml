@@ -21,7 +21,7 @@ jobs:
             rust_target: aarch64-apple-darwin
             artifact_arch: aarch64
             args: "--target aarch64-apple-darwin"
-          - os: macos-15-intel
+          - os: macos-13
             target: macOS-x86_64
             rust_target: x86_64-apple-darwin
             artifact_arch: x86_64
