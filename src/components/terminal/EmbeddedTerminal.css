@@ -1,0 +1,99 @@
+.embedded-terminal-container {
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid var(--color-border);
+  overflow: hidden;
+  position: relative;
+  width: 100%;
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  transition: background-color var(--transition-normal);
+}
+
+.embedded-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--color-border);
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+  user-select: none;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.terminal-title span {
+  opacity: 0.7;
+  font-family: Consolas, "Courier New", monospace;
+  font-size: 0.75rem;
+  margin-left: 6px;
+}
+
+.terminal-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.terminal-actions .icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 4px;
+  font-size: 1rem;
+  transition: all 0.2s ease;
+}
+
+.terminal-actions .icon-btn.text-btn {
+  font-size: 0.75rem;
+  padding: 4px 8px;
+}
+
+.terminal-actions .icon-btn:hover {
+  background-color: var(--color-hover);
+  color: var(--color-text-primary);
+}
+
+.embedded-terminal-body {
+  flex: 1;
+  overflow: hidden;
+  padding: 8px;
+  /* Required for xterm FitAddon to correctly measure dimensions */
+  position: relative;
+}
+
+.embedded-terminal-body .xterm {
+  height: 100%;
+}
+
+/* Smooth Cursor & Glow */
+.xterm-cursor {
+  box-shadow: 0 0 10px var(--color-accent);
+  transition: opacity 0.15s ease-in-out;
+}
+.xterm-cursor-layer {
+  animation: xtermBlink 1s step-end infinite;
+}
+
+/* Custom xterm scrollbar styling */
+.xterm .xterm-viewport::-webkit-scrollbar {
+  width: 10px;
+  background: transparent;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+.xterm .xterm-viewport::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}

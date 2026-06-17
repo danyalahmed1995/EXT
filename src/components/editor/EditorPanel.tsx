@@ -385,6 +385,30 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({
               e.currentTarget.scrollLeft += e.deltaY;
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+              e.preventDefault(); // prevent native dnd-kit or browser scroll focus
+              const activeIndex = tabs.findIndex(t => t.id === activeTabId);
+              if (activeIndex === -1) return;
+              
+              let nextIndex = activeIndex;
+              if (e.key === 'ArrowLeft') {
+                nextIndex = activeIndex > 0 ? activeIndex - 1 : tabs.length - 1;
+              } else {
+                nextIndex = activeIndex < tabs.length - 1 ? activeIndex + 1 : 0;
+              }
+              
+              const nextTab = tabs[nextIndex];
+              if (nextTab) {
+                onTabSelect(nextTab.id);
+                // Move focus so subsequent arrow presses work
+                requestAnimationFrame(() => {
+                  const nextEl = document.getElementById(`editor-tab-${nextTab.id}`);
+                  if (nextEl) nextEl.focus();
+                });
+              }
+            }
+          }}
         >
           <SortableContext items={tabs.map(t => `tab-${t.id}`)} strategy={horizontalListSortingStrategy}>
             {tabs.map((tab) => (

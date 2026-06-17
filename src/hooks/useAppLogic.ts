@@ -65,6 +65,8 @@ export function useAppLogic() {
     ignoredDirs: defaultIgnoredDirs,
     enableProfiler: false,
     previewCentered: false,
+    enableTerminal: false,
+    terminalAutoSyncCwd: false,
     largeFileMode: DEFAULT_LARGE_FILE_SETTINGS,
   }), []);
 

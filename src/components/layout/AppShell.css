@@ -37,6 +37,36 @@
   border-radius: var(--radius-pill);
 }
 
+.resize-handle-vertical {
+  height: 4px;
+  cursor: row-resize;
+  background: transparent;
+  position: relative;
+  flex-shrink: 0;
+  z-index: 10;
+  transition: background var(--transition-fast);
+  width: 100%;
+}
+
+.resize-handle-vertical::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  height: 1px;
+  width: 100%;
+  background: var(--color-border-subtle);
+  transition: all var(--transition-fast);
+}
+
+.resize-handle-vertical:hover::after,
+.resize-handle-vertical.dragging::after {
+  height: 3px;
+  background: var(--color-accent);
+  border-radius: var(--radius-pill);
+}
+
 /* ── Pane wrappers ──────────────────────────────── */
 
 .pane-sidebar {
@@ -52,5 +82,18 @@
 .pane-editor {
   flex: 1;
   min-width: 300px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.pane-editor-main {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.pane-terminal {
+  flex-shrink: 0;
   overflow: hidden;
 }

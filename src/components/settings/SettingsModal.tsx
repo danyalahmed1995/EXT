@@ -227,6 +227,38 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 					</section>
 
 					<section className="settings-section">
+						<h3>Terminal</h3>
+						<p className="settings-desc">
+							Cross-platform embedded terminal panel.
+						</p>
+
+						<div className="settings-toggles">
+							<label className="settings-toggle">
+								<input
+									type="checkbox"
+									checked={!!appearance.enableTerminal}
+									onChange={() => handleToggle("enableTerminal")}
+								/>
+								<span className="toggle-label">
+									Enable embedded terminal
+								</span>
+							</label>
+
+							<label className="settings-toggle">
+								<input
+									type="checkbox"
+									checked={!!appearance.terminalAutoSyncCwd}
+									onChange={() => handleToggle("terminalAutoSyncCwd")}
+									disabled={!appearance.enableTerminal}
+								/>
+								<span className="toggle-label" style={{ opacity: appearance.enableTerminal ? 1 : 0.5 }}>
+									Auto-sync directory to active file
+								</span>
+							</label>
+						</div>
+					</section>
+
+					<section className="settings-section">
 						<h3>Large Files</h3>
 						<p className="settings-desc">
 							Open very large files in safe mode without loading the full document.

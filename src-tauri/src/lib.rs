@@ -1,3 +1,7 @@
+pub mod terminal;
+use terminal::{spawn_terminal, write_terminal, resize_terminal, kill_terminal, TerminalState};
+use std::sync::{Arc, Mutex};
+
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fs;
@@ -1417,6 +1421,9 @@ fn fetch_git_status(file_path: String) -> Option<GitStatus> {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .manage(TerminalState {
+            instance: Arc::new(Mutex::new(None)),
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![
@@ -1443,7 +1450,11 @@ pub fn run() {
             force_restart,
             open_devtools,
             initialize_example_workspace,
-            fetch_git_status
+            fetch_git_status,
+            spawn_terminal,
+            write_terminal,
+            resize_terminal,
+            kill_terminal
         ])
         .setup(|app| {
             let open_i = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;

@@ -9,7 +9,7 @@ import { SettingsModal } from './components/settings/SettingsModal';
 import { ContextMenu } from './components/context-menu/ContextMenu';
 import { DndContext, pointerWithin } from '@dnd-kit/core';
 import { normalizeLargeFileSettings } from './utils/largeFile';
-
+import { EmbeddedTerminal } from './components/terminal/EmbeddedTerminal';
 
 import { useAppLogic } from './hooks/useAppLogic';
 import { useIdleState } from './hooks/useIdleState';
@@ -82,15 +82,58 @@ function App() {
   const activeFileExtension = activeTabMemo?.extension;
   const largeFileSettings = normalizeLargeFileSettings(appearance.largeFileMode);
 
+  const [isTerminalVisible, setIsTerminalVisible] = useState(false);
+
+  useEffect(() => {
+    if (!appearance.enableTerminal) {
+      setIsTerminalVisible(false);
+    } else if (appearance.enableTerminal && !isTerminalVisible) {
+      setIsTerminalVisible(true);
+    }
+  }, [appearance.enableTerminal]);
+
+  const activeWorkspace = workspaces.find(w => w.path === activeTabMemo?.workspacePath) || workspaces[0];
+  const terminalCwd = useMemo(() => {
+    if (activeTabMemo && activeTabMemo.absolutePath) {
+      const path = activeTabMemo.absolutePath;
+      const lastSlash = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+      if (lastSlash > 0) {
+        return path.substring(0, lastSlash);
+      }
+    }
+    if (activeWorkspace) {
+      return activeWorkspace.path;
+    }
+    return '';
+  }, [activeTabMemo, activeWorkspace]);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (!(e.ctrlKey || e.metaKey) || e.altKey || e.shiftKey || e.key.toLowerCase() !== 'b') return;
-      e.preventDefault();
-      setIsSidebarVisible((visible) => !visible);
+      // Toggle sidebar: Ctrl/Cmd + B
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault();
+        setIsSidebarVisible((visible) => !visible);
+        return;
+      }
+      
+      // Toggle terminal: Ctrl/Cmd + `
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key === '`') {
+        e.preventDefault();
+        e.stopPropagation(); // prevent xterm from also processing it if it was focused
+        // Automatically enable terminal setting if it was disabled
+        setAppearance(prev => {
+          if (!prev.enableTerminal) {
+            return { ...prev, enableTerminal: true };
+          }
+          return prev;
+        });
+        setIsTerminalVisible((visible) => !visible);
+        return;
+      }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
   }, []);
 
   // ── Run Profile Automation ────────────────────────
@@ -259,6 +302,18 @@ function App() {
             previewKey={previewKey}
             showLargeFileDetails={largeFileSettings.showDetailsPanel}
           />
+        }
+        terminal={
+          appearance.enableTerminal ? (
+            <EmbeddedTerminal
+              initialCwd={terminalCwd}
+              currentCwd={terminalCwd}
+              autoSyncCwd={!!appearance.terminalAutoSyncCwd}
+              onClose={() => setIsTerminalVisible(false)}
+              height={0} // will be overridden by AppShell cloneElement
+              isVisible={isTerminalVisible}
+            />
+          ) : undefined
         }
       />
 

@@ -81,7 +81,16 @@ function normalizeExtension(pathOrExtension: string): string {
   }
 
   const dotIndex = fileName.lastIndexOf('.');
-  return dotIndex >= 0 ? fileName.slice(dotIndex).toLowerCase() : '';
+  if (dotIndex >= 0) {
+    return fileName.slice(dotIndex).toLowerCase();
+  }
+  
+  // If there's no dot and it's just a word, assume it's a bare extension (e.g. "md", "json")
+  if (fileName && !fileName.includes(' ')) {
+    return `.${fileName.toLowerCase()}`;
+  }
+
+  return '';
 }
 
 export function getFileType(pathOrExtension: string): FileTypeId {
